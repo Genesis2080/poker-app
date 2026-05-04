@@ -1,1 +1,25 @@
 @import "tailwindcss";
+
+:root {
+  --accent: #4ade80;
+  --surface: #1e293b;
+  --surface2: #0f172a;
+  --bg2: #0f172a;
+  --border: #334155;
+  --border2: #475569;
+  --text: #f1f5f9;
+  --text2: #cbd5e1;
+  --text3: #94a3b8;
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --radius: 8px;
+  --radius-sm: 6px;
+}
+
+body {
+  margin: 0;
+  background: #0f172a;
+  color: #f1f5f9;
+  font-family: var(--font-body);
+}

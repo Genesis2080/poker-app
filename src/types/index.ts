@@ -41,8 +41,9 @@ export interface Hand {
 export interface StudyPlanItem {
   id: string
   topic: string
-  subtopic: string
+  description: string
   street: 'preflop' | 'flop' | 'turn' | 'river' | 'general'
+  category: string
   completed: boolean
   priority: 'high' | 'medium' | 'low'
 }
