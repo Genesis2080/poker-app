@@ -97,7 +97,7 @@ function TopicRow({ item, onToggle }: { item: any; onToggle: () => void }) {
           >
             {item.topic}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' as const }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: catColors.text, background: catColors.bg, padding: '1px 6px', borderRadius: 4 }}>
               {catColors.label}
             </span>
@@ -231,7 +231,7 @@ export default function StudyPlan() {
             {/* Overall Progress */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '18px' }}>
               <div style={{ marginBottom: '12px' }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text3)', textTransform: 'uppercase' as const, letterSpacing: '0.1em' }}>Progreso Total</div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Progreso Total</div>
                 <div style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--accent)', lineHeight: 1.1, marginTop: '4px' }}>{overall.percentage}%</div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text3)', marginTop: '4px' }}>
                   {overall.completed} de {overall.total} temas completados
@@ -258,7 +258,7 @@ export default function StudyPlan() {
 
             {/* Filter by category */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: '10px' }}>Filtrar por categoría</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Filtrar por categoría</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 <FilterBtn label="Todos" active={filter === 'all'} onClick={() => setFilter('all')} />
                 {categories.map(cat => {
@@ -278,7 +278,7 @@ export default function StudyPlan() {
 
             {/* Progress by street */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: '10px' }}>Por calle</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Por calle</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {STREET_ORDER.map(street => {
                   const p = byStreet[street] || { percentage: 0, completed: 0, total: 0 }
@@ -309,7 +309,7 @@ export default function StudyPlan() {
 
             {/* Category progress */}
             <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: '10px' }}>Por categoría</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Por categoría</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {categories.map(cat => {
                   const p = byCategory[cat] || { percentage: 0 }
@@ -320,7 +320,7 @@ export default function StudyPlan() {
                         fontFamily: 'var(--font-mono)', fontSize: '9px',
                         color: colors.text, background: colors.bg,
                         padding: '1px 5px', borderRadius: 3,
-                        minWidth: 60, textAlign: 'center' as const,
+                        minWidth: 60, textAlign: 'center',
                       }}>
                         {colors?.label || cat}
                       </span>
@@ -368,7 +368,7 @@ function FilterBtn({ label, active, onClick, color }: { label: string; active: b
         border: `1px solid ${active ? (color ? `${color}30` : 'rgba(74,222,128,0.25)') : 'transparent'}`,
         color: active ? (color || 'var(--accent)') : 'var(--text2)',
         fontFamily: 'var(--font-mono)', fontSize: '11px',
-        cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left' as const,
+        cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
         width: '100%',
       }}
     >
