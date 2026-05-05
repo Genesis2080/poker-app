@@ -6,7 +6,7 @@ export default function Home() {
   return (
     <div className="space-y-8">
       <section className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-        <h2 className="text-2xl font-bold mb-4">Welcome to Practice App</h2>
+        <h2 className="text-2xl font-bold mb-4">Welcome to Poker App</h2>
         <p className="text-gray-400">
           A poker study application built with Vite, React, and TypeScript.
         </p>
