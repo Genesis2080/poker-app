@@ -1,12 +1,6 @@
-export interface StudyItem {
-  id: string
-  topic: string
-  description: string
-  street: 'preflop' | 'flop' | 'turn' | 'river' | 'general'
-  category: string
-  completed: boolean
-  priority: 'high' | 'medium' | 'low'
-}
+import type { StudyPlanItem } from '../types'
+
+export type StudyItem = StudyPlanItem
 
 export const STREET_ORDER = ['preflop', 'flop', 'turn', 'river'] as const
 
@@ -69,7 +63,7 @@ export const INITIAL_STUDY_PLAN: Record<string, StudyItem[]> = {
   ],
 }
 
-export function getOverallProgress(plan: Record<string, StudyItem[]>): { completed: number; total: number; percentage: number } {
+export function getOverallProgress(plan: Record<string, StudyPlanItem[]>): { completed: number; total: number; percentage: number } {
   let completed = 0
   let total = 0
   
@@ -87,7 +81,7 @@ export function getOverallProgress(plan: Record<string, StudyItem[]>): { complet
   }
 }
 
-export function getProgressByStreet(plan: Record<string, StudyItem[]>): Record<string, { percentage: number; completed: number; total: number }> {
+export function getProgressByStreet(plan: Record<string, StudyPlanItem[]>): Record<string, { percentage: number; completed: number; total: number }> {
   const result: Record<string, { percentage: number; completed: number; total: number }> = {}
   
   for (const street of [...STREET_ORDER, 'general']) {
@@ -105,7 +99,7 @@ export function getProgressByStreet(plan: Record<string, StudyItem[]>): Record<s
   return result
 }
 
-export function getCategoryProgress(plan: Record<string, StudyItem[]>): Record<string, { percentage: number }> {
+export function getCategoryProgress(plan: Record<string, StudyPlanItem[]>): Record<string, { percentage: number }> {
   const catCount: Record<string, { completed: number; total: number }> = {}
   
   for (const street of [...STREET_ORDER, 'general']) {

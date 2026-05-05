@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import type { StudyPlanItem } from '../types'
 import { useApp } from '../context/AppContext'
 import { PageHeader } from '../components/UI'
 import {
@@ -43,17 +44,23 @@ function ProgressBar({ percentage, color = 'var(--accent)' }: { percentage: numb
   )
 }
 
+type StudyMap = Record<string, StudyPlanItem[]>
+
+function getItemsForStreet(plan: StudyPlanItem[], street: string): StudyPlanItem[] {
+  return plan.filter(item => item.street === street)
+}
+
 function StreetSection({ streetId, items, onToggle, filter }: {
   streetId: string
-  items: any[]
+  items: StudyPlanItem[]
   onToggle: (id: string) => void
   filter: string
 }) {
   const colors = STREET_COLORS[streetId]
   const label = STREET_LABELS[streetId]
 
-  const filtered = filter === 'all' ? items : items.filter((i: any) => i.category === filter)
-  const completed = filtered.filter((i: any) => i.completed).length
+  const filtered = filter === 'all' ? items : items.filter(i => i.category === filter)
+  const completed = filtered.filter(i => i.completed).length
   const percentage = filtered.length > 0 ? Math.round((completed / filtered.length) * 100) : 0
 
   return (
@@ -66,7 +73,7 @@ function StreetSection({ streetId, items, onToggle, filter }: {
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: colors.text }}>{percentage}%</span>
       </div>
       <div style={{ padding: '8px' }}>
-        {filtered.map((item: any) => (
+        {filtered.map(item => (
           <TopicRow key={item.id} item={item} onToggle={() => onToggle(item.id)} />
         ))}
       </div>
@@ -74,7 +81,7 @@ function StreetSection({ streetId, items, onToggle, filter }: {
   )
 }
 
-function TopicRow({ item, onToggle }: { item: any; onToggle: () => void }) {
+function TopicRow({ item, onToggle }: { item: StudyPlanItem; onToggle: () => void }) {
   const [expanded, setExpanded] = useState(false)
   const catColors = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.fundamentos
 
@@ -109,7 +116,8 @@ function TopicRow({ item, onToggle }: { item: any; onToggle: () => void }) {
       </div>
       {expanded && (
         <div style={{
-          marginTop: '8px', marginLeft: '28px', padding: '10px 12px',
+          marginTop: '8px', marginLeft: '28px',
+          padding: '10px 12px',
           background: 'var(--bg2)', border: '1px solid var(--border)',
           borderRadius: 6, fontFamily: 'var(--font-body)', fontSize: '12px',
           color: 'var(--text2)', lineHeight: 1.6,
@@ -122,12 +130,12 @@ function TopicRow({ item, onToggle }: { item: any; onToggle: () => void }) {
 }
 
 function GeneralSection({ items, onToggle, filter }: {
-  items: any[]
+  items: StudyPlanItem[]
   onToggle: (id: string) => void
   filter: string
 }) {
-  const filtered = filter === 'all' ? items : items.filter((i: any) => i.category === filter)
-  const completed = filtered.filter((i: any) => i.completed).length
+  const filtered = filter === 'all' ? items : items.filter(i => i.category === filter)
+  const completed = filtered.filter(i => i.completed).length
   const percentage = filtered.length > 0 ? Math.round((completed / filtered.length) * 100) : 0
 
   return (
@@ -140,7 +148,7 @@ function GeneralSection({ items, onToggle, filter }: {
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#818cf8' }}>{percentage}%</span>
       </div>
       <div style={{ padding: '8px' }}>
-        {filtered.map((item: any) => (
+        {filtered.map(item => (
           <TopicRow key={item.id} item={item} onToggle={() => onToggle(item.id)} />
         ))}
       </div>
@@ -153,57 +161,49 @@ export default function StudyPlan() {
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
 
-  const studyPlan = data.studyPlan || INITIAL_STUDY_PLAN
+  const studyArray: StudyPlanItem[] = data.studyPlan || []
+  const studyMap: StudyMap = INITIAL_STUDY_PLAN
 
   function toggleItem(itemId: string) {
-    const newPlan = JSON.parse(JSON.stringify(studyPlan))
-    let found = false
-    for (const street of [...STREET_ORDER, 'general']) {
-      if (newPlan[street]) {
-        const item = newPlan[street].find((i: any) => i.id === itemId)
-        if (item) {
-          item.completed = !item.completed
-          found = true
-          break
-        }
-      }
-    }
-    if (found) {
-      setData(prev => ({ ...prev, studyPlan: newPlan }))
-    }
+    setData(prev => ({
+      ...prev,
+      studyPlan: prev.studyPlan.map(item =>
+        item.id === itemId ? { ...item, completed: !item.completed } : item
+      ),
+    }))
   }
 
   function resetAll() {
-    setData(prev => ({ ...prev, studyPlan: JSON.parse(JSON.stringify(INITIAL_STUDY_PLAN)) }))
+    const allItems = Object.values(INITIAL_STUDY_PLAN).flat()
+    setData(prev => ({ ...prev, studyPlan: JSON.parse(JSON.stringify(allItems)) }))
   }
 
-  const overall = getOverallProgress(studyPlan)
-  const byStreet = getProgressByStreet(studyPlan)
-  const byCategory = getCategoryProgress(studyPlan)
+  const overall = getOverallProgress(studyMap)
+  const byStreet = getProgressByStreet(studyMap)
+  const byCategory = getCategoryProgress(studyMap)
 
   const categories = useMemo(() => {
     const cats = new Set<string>()
-    for (const street of [...STREET_ORDER, 'general']) {
-      if (studyPlan[street]) {
-        studyPlan[street].forEach((i: any) => cats.add(i.category))
-      }
-    }
+    studyArray.forEach(i => cats.add(i.category))
     return Array.from(cats)
-  }, [studyPlan])
+  }, [studyArray])
 
-  const filteredStudyPlan = useMemo(() => {
-    if (!search.trim()) return studyPlan
+  const filteredStudyArray = useMemo(() => {
+    if (!search.trim()) return studyArray
     const q = search.toLowerCase()
-    const result: Record<string, any[]> = {}
-    for (const street of [...STREET_ORDER, 'general']) {
-      if (studyPlan[street]) {
-        result[street] = studyPlan[street].filter((i: any) =>
-          i.topic.toLowerCase().includes(q) || i.description.toLowerCase().includes(q)
-        )
-      }
+    return studyArray.filter(i =>
+      i.topic.toLowerCase().includes(q) || i.description.toLowerCase().includes(q)
+    )
+  }, [studyArray, search])
+
+  const filteredByStreet = useMemo(() => {
+    const result: StudyMap = {}
+    for (const street of STREET_ORDER) {
+      result[street] = getItemsForStreet(filteredStudyArray, street)
     }
+    result['general'] = getItemsForStreet(filteredStudyArray, 'general')
     return result
-  }, [studyPlan, search])
+  }, [filteredStudyArray])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -341,13 +341,14 @@ export default function StudyPlan() {
               <StreetSection
                 key={street}
                 streetId={street}
-                items={filteredStudyPlan[street] || []}
+                items={filteredByStreet[street] || []}
                 onToggle={toggleItem}
                 filter={filter}
               />
             ))}
+
             <GeneralSection
-              items={filteredStudyPlan.general || []}
+              items={filteredByStreet.general || []}
               onToggle={toggleItem}
               filter={filter}
             />
