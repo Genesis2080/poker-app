@@ -1,170 +1,24 @@
 import { useState, useMemo } from 'react'
 import type { StudyPlanItem } from '../types'
 import { useApp } from '../context/AppContext'
-import { PageHeader } from '../components/UI'
+import { Button } from '../components/Button'
+import { Input } from '../components/Input'
 import {
   STREET_ORDER,
   STREET_COLORS,
   STREET_LABELS,
   CATEGORY_COLORS,
   INITIAL_STUDY_PLAN,
-  getOverallProgress,
-  getProgressByStreet,
-  getCategoryProgress,
 } from '../data/studyPlan'
 
-function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <button
-      onClick={onChange}
-      aria-checked={checked}
-      aria-label="Marcar como completado"
-      style={{
-        width: 18, height: 18, borderRadius: 4,
-        border: `2px solid ${checked ? 'var(--accent)' : 'var(--border2)'}`,
-        background: checked ? 'var(--accent)' : 'transparent',
-        cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        flexShrink: 0, transition: 'all 0.15s',
-      }}
-    >
-      {checked && (
-        <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-          <path d="M2 5L4.5 7.5L8 3" stroke="#0d1a0d" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )}
-    </button>
-  )
-}
-
-function ProgressBar({ percentage, color = 'var(--accent)' }: { percentage: number; color?: string }) {
-  return (
-    <div style={{ width: '100%', height: 6, background: 'var(--border2)', borderRadius: 3, overflow: 'hidden' }}>
-      <div style={{ width: `${percentage}%`, height: '100%', background: color, borderRadius: 3, transition: 'width 0.3s ease' }} />
-    </div>
-  )
-}
-
-type StudyMap = Record<string, StudyPlanItem[]>
-
-function getItemsForStreet(plan: StudyPlanItem[], street: string): StudyPlanItem[] {
-  return plan.filter(item => item.street === street)
-}
-
-function StreetSection({ streetId, items, onToggle, filter }: {
-  streetId: string
-  items: StudyPlanItem[]
-  onToggle: (id: string) => void
-  filter: string
-}) {
-  const colors = STREET_COLORS[streetId]
-  const label = STREET_LABELS[streetId]
-
-  const filtered = filter === 'all' ? items : items.filter(i => i.category === filter)
-  const completed = filtered.filter(i => i.completed).length
-  const percentage = filtered.length > 0 ? Math.round((completed / filtered.length) * 100) : 0
-
-  return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-      <div style={{ padding: '14px 18px', background: colors.bg, borderBottom: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: '15px', color: colors.text, fontWeight: 500 }}>{label}</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: colors.text, opacity: 0.7 }}>{completed}/{filtered.length}</span>
-        </div>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: colors.text }}>{percentage}%</span>
-      </div>
-      <div style={{ padding: '8px' }}>
-        {filtered.map(item => (
-          <TopicRow key={item.id} item={item} onToggle={() => onToggle(item.id)} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function TopicRow({ item, onToggle }: { item: StudyPlanItem; onToggle: () => void }) {
-  const [expanded, setExpanded] = useState(false)
-  const catColors = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.fundamentos
-
-  return (
-    <div style={{
-      padding: '10px 10px', borderRadius: 6, transition: 'background 0.1s',
-      background: expanded ? 'var(--bg2)' : 'transparent',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
-        <div style={{ paddingTop: '2px' }}><Checkbox checked={item.completed} onChange={onToggle} /></div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontFamily: 'var(--font-body)', fontSize: '13px',
-              color: item.completed ? 'var(--text3)' : 'var(--text)',
-              textDecoration: item.completed ? 'line-through' : 'none',
-              cursor: 'pointer', marginBottom: '3px',
-            }}
-            onClick={() => setExpanded(!expanded)}
-          >
-            {item.topic}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: catColors.text, background: catColors.bg, padding: '1px 6px', borderRadius: 4 }}>
-              {catColors.label}
-            </span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)' }}>
-              {expanded ? '▲' : '▼'}
-            </span>
-          </div>
-        </div>
-      </div>
-      {expanded && (
-        <div style={{
-          marginTop: '8px', marginLeft: '28px',
-          padding: '10px 12px',
-          background: 'var(--bg2)', border: '1px solid var(--border)',
-          borderRadius: 6, fontFamily: 'var(--font-body)', fontSize: '12px',
-          color: 'var(--text2)', lineHeight: 1.6,
-        }}>
-          {item.description}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function GeneralSection({ items, onToggle, filter }: {
-  items: StudyPlanItem[]
-  onToggle: (id: string) => void
-  filter: string
-}) {
-  const filtered = filter === 'all' ? items : items.filter(i => i.category === filter)
-  const completed = filtered.filter(i => i.completed).length
-  const percentage = filtered.length > 0 ? Math.round((completed / filtered.length) * 100) : 0
-
-  return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-      <div style={{ padding: '14px 18px', background: 'rgba(99,102,241,0.08)', borderBottom: '1px solid rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: '15px', color: '#818cf8', fontWeight: 500 }}>General</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#818cf8', opacity: 0.7 }}>{completed}/{filtered.length}</span>
-        </div>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#818cf8' }}>{percentage}%</span>
-      </div>
-      <div style={{ padding: '8px' }}>
-        {filtered.map(item => (
-          <TopicRow key={item.id} item={item} onToggle={() => onToggle(item.id)} />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-export default function StudyPlan() {
+export default function Study() {
   const { data, setData } = useApp()
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
 
-  const studyArray: StudyPlanItem[] = data.studyPlan || []
-  const studyMap: StudyMap = INITIAL_STUDY_PLAN
+  const studyArray: StudyPlanItem[] = Array.isArray(data.studyPlan) ? data.studyPlan : []
 
-  function toggleItem(itemId: string) {
+  const toggleItem = (itemId: string) => {
     setData(prev => ({
       ...prev,
       studyPlan: prev.studyPlan.map(item =>
@@ -173,14 +27,41 @@ export default function StudyPlan() {
     }))
   }
 
-  function resetAll() {
+  const resetAll = () => {
     const allItems = Object.values(INITIAL_STUDY_PLAN).flat()
     setData(prev => ({ ...prev, studyPlan: JSON.parse(JSON.stringify(allItems)) }))
   }
 
-  const overall = getOverallProgress(studyMap)
-  const byStreet = getProgressByStreet(studyMap)
-  const byCategory = getCategoryProgress(studyMap)
+  const overall = useMemo(() => {
+    const completed = studyArray.filter(i => i.completed).length
+    const total = studyArray.length
+    return {
+      completed,
+      total,
+      percentage: total > 0 ? Math.round((completed / total) * 100) : 0,
+    }
+  }, [studyArray])
+
+  const byStreet = useMemo(() => {
+    const result: Record<string, { percentage: number; completed: number; total: number }> = {}
+    for (const street of STREET_ORDER) {
+      const items = studyArray.filter(i => i.street === street)
+      const completed = items.filter(i => i.completed).length
+      result[street] = {
+        completed,
+        total: items.length,
+        percentage: items.length > 0 ? Math.round((completed / items.length) * 100) : 0,
+      }
+    }
+    const generalItems = studyArray.filter(i => i.street === 'general')
+    const generalCompleted = generalItems.filter(i => i.completed).length
+    result['general'] = {
+      completed: generalCompleted,
+      total: generalItems.length,
+      percentage: generalItems.length > 0 ? Math.round((generalCompleted / generalItems.length) * 100) : 0,
+    }
+    return result
+  }, [studyArray])
 
   const categories = useMemo(() => {
     const cats = new Set<string>()
@@ -189,169 +70,191 @@ export default function StudyPlan() {
   }, [studyArray])
 
   const filteredStudyArray = useMemo(() => {
-    if (!search.trim()) return studyArray
-    const q = search.toLowerCase()
-    return studyArray.filter(i =>
-      i.topic.toLowerCase().includes(q) || i.description.toLowerCase().includes(q)
-    )
-  }, [studyArray, search])
-
-  const filteredByStreet = useMemo(() => {
-    const result: StudyMap = {}
-    for (const street of STREET_ORDER) {
-      result[street] = getItemsForStreet(filteredStudyArray, street)
+    let filtered = studyArray
+    if (filter !== 'all') {
+      filtered = filtered.filter(i => i.category === filter)
     }
-    result['general'] = getItemsForStreet(filteredStudyArray, 'general')
-    return result
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      filtered = filtered.filter(i =>
+        i.topic.toLowerCase().includes(q) || i.description.toLowerCase().includes(q)
+      )
+    }
+    return filtered
+  }, [studyArray, filter, search])
+
+  const streetData = useMemo(() => {
+    return STREET_ORDER.map(street => {
+      const items = filteredStudyArray.filter(i => i.street === street)
+      const completed = items.filter(i => i.completed).length
+      return {
+        street,
+        label: STREET_LABELS[street],
+        colors: STREET_COLORS[street],
+        items,
+        completed,
+        total: items.length,
+        percentage: items.length > 0 ? Math.round((completed / items.length) * 100) : 0,
+      }
+    })
+  }, [filteredStudyArray])
+
+  const generalItems = useMemo(() => {
+    const items = filteredStudyArray.filter(i => i.street === 'general')
+    const completed = items.filter(i => i.completed).length
+    return { items, completed, total: items.length, percentage: items.length > 0 ? Math.round((completed / items.length) * 100) : 0 }
   }, [filteredStudyArray])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <PageHeader
-        title="Plan de Estudios"
-        subtitle="Domina el póker calle por calle"
-        action={
-          <button
-            onClick={resetAll}
-            style={{
-              background: 'var(--surface2)', border: '1px solid var(--border)',
-              borderRadius: 'var(--radius-sm)', color: 'var(--text2)',
-              fontFamily: 'var(--font-mono)', fontSize: '11px',
-              padding: '6px 12px', cursor: 'pointer',
-            }}
-          >
+    <div className="space-y-6">
+      {/* Header elegante */}
+      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-900/50 to-purple-900/50 rounded-2xl p-8 border border-indigo-800/30">
+        <div className="relative z-10">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+            Plan de Estudios
+          </h1>
+          <p className="text-gray-400 mt-2">Domina el póker calle por calle</p>
+        </div>
+        <div className="mt-6 flex items-center gap-4">
+          <div className="bg-gray-800/80 backdrop-blur rounded-xl px-6 py-3 border border-gray-700">
+            <div className="text-3xl font-bold text-indigo-400">{overall.percentage}%</div>
+            <div className="text-gray-500 text-xs">Progreso total</div>
+          </div>
+          <div className="bg-gray-800/80 backdrop-blur rounded-xl px-6 py-3 border border-gray-700">
+            <div className="text-3xl font-bold text-green-400">{overall.completed}<span className="text-gray-500 text-lg">/{overall.total}</span></div>
+            <div className="text-gray-500 text-xs">Temas completados</div>
+          </div>
+          <Button variant="ghost" onClick={resetAll} className="ml-auto">
             Resetear todo
-          </button>
-        }
-      />
-      <div style={{ flex: 1, overflow: 'auto', padding: '20px 24px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', gap: '20px', alignItems: 'start' }}>
-          {/* Sidebar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', position: 'sticky', top: 0 }}>
-            {/* Overall Progress */}
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '18px' }}>
-              <div style={{ marginBottom: '12px' }}>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Progreso Total</div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '32px', color: 'var(--accent)', lineHeight: 1.1, marginTop: '4px' }}>{overall.percentage}%</div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: 'var(--text3)', marginTop: '4px' }}>
-                  {overall.completed} de {overall.total} temas completados
-                </div>
-              </div>
-              <ProgressBar percentage={overall.percentage} />
-            </div>
+          </Button>
+        </div>
+      </div>
 
-            {/* Search */}
-            <input
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* Sidebar */}
+        <div className="lg:col-span-1 space-y-4">
+          {/* Search */}
+          <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+            <Input
+              label="Buscar tema"
               type="text"
-              placeholder="Buscar tema..."
               value={search}
-              onChange={e => setSearch(e.target.value)}
-              style={{
-                width: '100%', background: 'var(--surface)', border: '1px solid var(--border2)',
-                borderRadius: 'var(--radius-sm)', color: 'var(--text)',
-                fontFamily: 'var(--font-body)', fontSize: '13px',
-                padding: '8px 10px', outline: 'none',
-              }}
-              onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
-              onBlur={e => (e.target.style.borderColor = 'var(--border2)')}
+              onChange={setSearch}
+              placeholder="Ej: c-bet, flush..."
+              noMargin
             />
+          </div>
 
-            {/* Filter by category */}
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Filtrar por categoría</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                <FilterBtn label="Todos" active={filter === 'all'} onClick={() => setFilter('all')} />
-                {categories.map(cat => {
-                  const colors = CATEGORY_COLORS[cat]
-                  return (
-                    <FilterBtn
-                      key={cat}
-                      label={colors?.label || cat}
-                      active={filter === cat}
-                      onClick={() => setFilter(filter === cat ? 'all' : cat)}
-                      color={colors?.text}
-                    />
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Progress by street */}
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Por calle</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {STREET_ORDER.map(street => {
-                  const p = byStreet[street] || { percentage: 0, completed: 0, total: 0 }
-                  const colors = STREET_COLORS[street]
-                  return (
-                    <div key={street}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: colors.text }}>{STREET_LABELS[street]}</span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)' }}>{p.percentage}%</span>
-                      </div>
-                      <div style={{ height: 4, background: 'var(--border2)', borderRadius: 2, overflow: 'hidden' }}>
-                        <div style={{ width: `${p.percentage}%`, height: '100%', background: colors.text, borderRadius: 2, transition: 'width 0.3s ease' }} />
-                      </div>
-                    </div>
-                  )
-                })}
-                <div style={{ marginTop: '4px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '11px', color: '#818cf8' }}>General</span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)' }}>{byStreet.general?.percentage || 0}%</span>
-                  </div>
-                  <div style={{ height: 4, background: 'var(--border2)', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ width: `${byStreet.general?.percentage || 0}%`, height: '100%', background: '#818cf8', borderRadius: 2, transition: 'width 0.3s ease' }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Category progress */}
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '14px' }}>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text3)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Por categoría</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {categories.map(cat => {
-                  const p = byCategory[cat] || { percentage: 0 }
-                  const colors = CATEGORY_COLORS[cat]
-                  return (
-                    <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        fontFamily: 'var(--font-mono)', fontSize: '9px',
-                        color: colors.text, background: colors.bg,
-                        padding: '1px 5px', borderRadius: 3,
-                        minWidth: 60, textAlign: 'center',
-                      }}>
-                        {colors?.label || cat}
-                      </span>
-                      <div style={{ flex: 1, height: 4, background: 'var(--border2)', borderRadius: 2, overflow: 'hidden' }}>
-                        <div style={{ width: `${p.percentage}%`, height: '100%', background: colors.text, borderRadius: 2, transition: 'width 0.3s ease' }} />
-                      </div>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '9px', color: 'var(--text3)', minWidth: 30 }}>{p.percentage}%</span>
-                    </div>
-                  )
-                })}
-              </div>
+          {/* Filtros por categoría */}
+          <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Categorías</h4>
+            <div className="space-y-1">
+              <button
+                onClick={() => setFilter('all')}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                  filter === 'all' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50'
+                }`}
+              >
+                Todas
+              </button>
+              {categories.map(cat => {
+                const colors = CATEGORY_COLORS[cat]
+                return (
+                  <button
+                    key={cat}
+                    onClick={() => setFilter(filter === cat ? 'all' : cat)}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
+                      filter === cat ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: colors?.text || '#666' }}></span>
+                    {colors?.label || cat}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
-          {/* Main content */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {STREET_ORDER.map(street => (
-              <StreetSection
-                key={street}
-                streetId={street}
-                items={filteredByStreet[street] || []}
-                onToggle={toggleItem}
-                filter={filter}
-              />
-            ))}
+          {/* Progreso por calle */}
+          <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Por Calle</h4>
+            <div className="space-y-3">
+              {STREET_ORDER.map(street => {
+                const p = byStreet[street] || { percentage: 0, completed: 0, total: 0 }
+                const colors = STREET_COLORS[street]
+                return (
+                  <div key={street}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span style={{ color: colors.text }}>{STREET_LABELS[street]}</span>
+                      <span className="text-gray-500">{p.completed}/{p.total}</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{ width: `${p.percentage}%`, backgroundColor: colors.text }}
+                      ></div>
+                    </div>
+                  </div>
+                )
+              })}
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="text-indigo-400">General</span>
+                  <span className="text-gray-500">{byStreet.general?.completed || 0}/{byStreet.general?.total || 0}</span>
+                </div>
+                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                    style={{ width: `${byStreet.general?.percentage || 0}%` }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-            <GeneralSection
-              items={filteredByStreet.general || []}
-              onToggle={toggleItem}
-              filter={filter}
-            />
+        {/* Main Content */}
+        <div className="lg:col-span-3 space-y-4">
+          {streetData.map(({ street, label, colors, items, completed, total, percentage }) => (
+            <div key={street} className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+              <div className="px-6 py-4 flex items-center justify-between" style={{ backgroundColor: `${colors.bg}` }}>
+                <div className="flex items-center gap-3">
+                  <span className="font-semibold" style={{ color: colors.text }}>{label}</span>
+                  <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: `${colors.text}20`, color: colors.text }}>
+                    {completed}/{total}
+                  </span>
+                </div>
+                <span className="text-sm font-mono" style={{ color: colors.text }}>{percentage}%</span>
+              </div>
+              <div className="divide-y divide-gray-700/50">
+                {items.map(item => (
+                  <StudyItem key={item.id} item={item} onToggle={() => toggleItem(item.id)} />
+                ))}
+                {items.length === 0 && (
+                  <div className="px-6 py-8 text-center text-gray-500 text-sm">
+                    No hay temas en esta categoría
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* General Section */}
+          <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+            <div className="px-6 py-4 flex items-center justify-between" style={{ backgroundColor: 'rgba(99,102,241,0.08)' }}>
+              <div className="flex items-center gap-3">
+                <span className="font-semibold text-indigo-400">General</span>
+                <span className="text-xs px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-400">
+                  {generalItems.completed}/{generalItems.total}
+                </span>
+              </div>
+              <span className="text-sm font-mono text-indigo-400">{generalItems.percentage}%</span>
+            </div>
+            <div className="divide-y divide-gray-700/50">
+              {generalItems.items.map(item => (
+                <StudyItem key={item.id} item={item} onToggle={() => toggleItem(item.id)} />
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -359,26 +262,50 @@ export default function StudyPlan() {
   )
 }
 
-function FilterBtn({ label, active, onClick, color }: { label: string; active: boolean; onClick: () => void; color?: string }) {
+function StudyItem({ item, onToggle }: { item: StudyPlanItem; onToggle: () => void }) {
+  const [expanded, setExpanded] = useState(false)
+  const catColors = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.fundamentos
+
   return (
-    <button
-      onClick={onClick}
-      style={{
-        display: 'flex', alignItems: 'center', padding: '6px 10px', borderRadius: 6,
-        background: active ? (color ? `${color}15` : 'rgba(74,222,128,0.1)') : 'transparent',
-        border: `1px solid ${active ? (color ? `${color}30` : 'rgba(74,222,128,0.25)') : 'transparent'}`,
-        color: active ? (color || 'var(--accent)') : 'var(--text2)',
-        fontFamily: 'var(--font-mono)', fontSize: '11px',
-        cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
-        width: '100%',
-      }}
-    >
-      <span style={{
-        width: 8, height: 8, borderRadius: 2, marginRight: '8px',
-        background: active ? (color || 'var(--accent)') : 'var(--border2)',
-        flexShrink: 0,
-      }} />
-      {label}
-    </button>
+    <div className={`px-6 py-4 transition-colors ${expanded ? 'bg-gray-700/30' : 'hover:bg-gray-700/20'}`}>
+      <div className="flex items-start gap-3">
+        <button
+          onClick={onToggle}
+          className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+            item.completed
+              ? 'bg-green-500 border-green-500'
+              : 'border-gray-600 hover:border-gray-500'
+          }`}
+        >
+          {item.completed && (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 6L5 9L10 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </button>
+        <div className="flex-1 min-w-0">
+          <div
+            className={`text-sm cursor-pointer ${item.completed ? 'text-gray-500 line-through' : 'text-gray-200'}`}
+            onClick={() => setExpanded(!expanded)}
+          >
+            {item.topic}
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <span
+              className="text-xs px-2 py-0.5 rounded"
+              style={{ backgroundColor: `${catColors.bg}`, color: catColors.text }}
+            >
+              {catColors.label}
+            </span>
+            <span className="text-xs text-gray-500">{expanded ? '▲' : '▼'}</span>
+          </div>
+        </div>
+      </div>
+      {expanded && (
+        <div className="mt-3 ml-8 p-4 bg-gray-900/50 rounded-lg text-sm text-gray-400 leading-relaxed">
+          {item.description}
+        </div>
+      )}
+    </div>
   )
 }

@@ -60,6 +60,19 @@ export interface Flashcard {
   reviews: number
 }
 
+export type GameModality = 'cash' | 'tournament' | 'spins'
+
+export interface Session {
+  id: string
+  date: string
+  modality: GameModality
+  tournamentName?: string
+  buyIn: number
+  cashOut: number
+  timePlayedMinutes: number
+  notes?: string
+}
+
 export interface AppStats {
   totalHands: number
   winRate: number
@@ -67,4 +80,8 @@ export interface AppStats {
   pfr: number
   threeBet: number
   cbet: number
+  totalSessions: number
+  totalInvested: number
+  totalWon: number
+  roi: number
 }

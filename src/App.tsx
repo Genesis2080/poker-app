@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import Home from './pages/Home'
 import Study from './pages/Study'
+import Hands from './pages/Hands'
 
 export default function App() {
   return (
@@ -27,7 +28,7 @@ export default function App() {
           <main className="max-w-4xl mx-auto p-6">
             <Routes>
               <Route path="/" element={<Home />} />
-              <Route path="/hands" element={<div className="text-center py-20">Hands Page - Coming Soon</div>} />
+              <Route path="/hands" element={<Hands />} />
               <Route path="/study" element={<Study />} />
             </Routes>
           </main>

@@ -1,11 +1,12 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
-import type { Hand, StudyPlanItem, Flashcard, AppStats } from '../types'
+import type { Hand, StudyPlanItem, Flashcard, AppStats, Session } from '../types'
 
 interface AppData {
   hands: Hand[]
   studyPlan: StudyPlanItem[]
   flashcards: Flashcard[]
+  sessions: Session[]
   stats: AppStats
 }
 
@@ -19,12 +20,15 @@ interface AppContextType {
   toggleStudyItem: (id: string) => void
   addFlashcard: (card: Flashcard) => void
   updateFlashcard: (id: string, updates: Partial<Flashcard>) => void
+  addSession: (session: Session) => void
+  deleteSession: (id: string) => void
 }
 
 const defaultData: AppData = {
   hands: [],
   studyPlan: [],
   flashcards: [],
+  sessions: [],
   stats: {
     totalHands: 0,
     winRate: 0,
@@ -32,6 +36,10 @@ const defaultData: AppData = {
     pfr: 0,
     threeBet: 0,
     cbet: 0,
+    totalSessions: 0,
+    totalInvested: 0,
+    totalWon: 0,
+    roi: 0,
   },
 }
 
@@ -108,6 +116,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }))
   }
 
+  const addSession = (session: Session) => {
+    setData((prev) => {
+      const newSessions = [session, ...prev.sessions]
+      const totalInvested = newSessions.reduce((sum, s) => sum + s.buyIn, 0)
+      const totalWon = newSessions.reduce((sum, s) => sum + s.cashOut, 0)
+      const roi = totalInvested > 0 ? ((totalWon - totalInvested) / totalInvested) * 100 : 0
+      
+      return {
+        ...prev,
+        sessions: newSessions,
+        stats: {
+          ...prev.stats,
+          totalSessions: newSessions.length,
+          totalInvested,
+          totalWon,
+          roi: Math.round(roi * 100) / 100,
+        }
+      }
+    })
+  }
+
+  const deleteSession = (id: string) => {
+    setData((prev) => {
+      const newSessions = prev.sessions.filter((s) => s.id !== id)
+      const totalInvested = newSessions.reduce((sum, s) => sum + s.buyIn, 0)
+      const totalWon = newSessions.reduce((sum, s) => sum + s.cashOut, 0)
+      const roi = totalInvested > 0 ? ((totalWon - totalInvested) / totalInvested) * 100 : 0
+      
+      return {
+        ...prev,
+        sessions: newSessions,
+        stats: {
+          ...prev.stats,
+          totalSessions: newSessions.length,
+          totalInvested,
+          totalWon,
+          roi: Math.round(roi * 100) / 100,
+        }
+      }
+    })
+  }
+
   return (
     <AppContext.Provider
       value={{
@@ -120,6 +170,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         toggleStudyItem,
         addFlashcard,
         updateFlashcard,
+        addSession,
+        deleteSession,
       }}
     >
       {children}
