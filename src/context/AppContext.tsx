@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
-import type { Hand, StudyPlanItem, Flashcard, AppStats, Session } from '../types'
+import type { Hand, StudyPlanItem, Flashcard, AppStats, Session, AuthUser } from '../types'
 import { createDefaultFlashcards } from '../data/flashcards'
 
 interface AppData {
@@ -14,6 +14,11 @@ interface AppData {
 interface AppContextType {
   data: AppData
   setData: React.Dispatch<React.SetStateAction<AppData>>
+  user: AuthUser | null
+  isAuthenticated: boolean
+  login: (username: string, password: string) => boolean
+  register: (username: string, password: string) => boolean
+  logout: () => void
   addHand: (hand: Hand) => void
   updateHand: (id: string, updates: Partial<Hand>) => void
   deleteHand: (id: string) => void
@@ -24,6 +29,8 @@ interface AppContextType {
   addSession: (session: Session) => void
   deleteSession: (id: string) => void
 }
+
+const AUTH_KEY = 'practice-app-auth'
 
 const defaultData: AppData = {
   hands: [],
@@ -44,17 +51,38 @@ const defaultData: AppData = {
   },
 }
 
+function loadUser(): AuthUser | null {
+  const raw = localStorage.getItem('practice-app-user')
+  if (!raw) return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+function hashPassword(password: string): string {
+  let hash = 0
+  for (let i = 0; i < password.length; i++) {
+    const char = password.charCodeAt(i)
+    hash = ((hash << 5) - hash) + char
+    hash = hash & hash
+  }
+  return 'h' + Math.abs(hash).toString(36)
+}
+
 const AppContext = createContext<AppContextType | undefined>(undefined)
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(defaultData)
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const isAuthenticated = user !== null
 
   useEffect(() => {
     const saved = localStorage.getItem('practice-app-data')
     if (saved) {
       try {
         const parsed = JSON.parse(saved)
-        // Si no tiene flashcards, cargar las por defecto
         if (!parsed.flashcards || parsed.flashcards.length === 0) {
           parsed.flashcards = createDefaultFlashcards()
         }
@@ -68,6 +96,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('practice-app-data', JSON.stringify(data))
   }, [data])
+
+  useEffect(() => {
+    const u = loadUser()
+    if (u) setUser(u)
+  }, [])
+
+  const login = (username: string, password: string): boolean => {
+    const raw = localStorage.getItem(AUTH_KEY)
+    if (!raw) return false
+    const users: Record<string, string> = JSON.parse(raw)
+    const storedHash = users[username]
+    if (!storedHash) return false
+    if (storedHash !== hashPassword(password)) return false
+    setUser({ username })
+    localStorage.setItem('practice-app-user', JSON.stringify({ username }))
+    return true
+  }
+
+  const register = (username: string, password: string): boolean => {
+    const raw = localStorage.getItem(AUTH_KEY)
+    const users: Record<string, string> = raw ? JSON.parse(raw) : {}
+    if (users[username]) return false
+    users[username] = hashPassword(password)
+    localStorage.setItem(AUTH_KEY, JSON.stringify(users))
+    setUser({ username })
+    localStorage.setItem('practice-app-user', JSON.stringify({ username }))
+    return true
+  }
+
+  const logout = () => {
+    setUser(null)
+    localStorage.removeItem('practice-app-user')
+  }
 
   const addHand = (hand: Hand) => {
     setData((prev) => ({
@@ -169,6 +230,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       value={{
         data,
         setData,
+        user,
+        isAuthenticated,
+        login,
+        register,
+        logout,
         addHand,
         updateHand,
         deleteHand,

@@ -85,3 +85,7 @@ export interface AppStats {
   totalWon: number
   roi: number
 }
+
+export interface AuthUser {
+  username: string
+}
