@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useApp } from '../context/AppContext'
 
 export default function Login() {
   const { login, register } = useApp()
+  const navigate = useNavigate()
   const [mode, setMode] = useState<'login' | 'register'>('login')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -25,26 +27,27 @@ export default function Login() {
     if (mode === 'login') {
       const success = login(username.trim(), password)
       if (!success) setError('Usuario o contraseña incorrectos')
+      else navigate('/')
     } else {
       const success = register(username.trim(), password)
       if (!success) setError('El usuario ya existe')
+      else navigate('/')
     }
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+    <div className="flex items-center justify-center" style={{ minHeight: 'calc(100vh - 180px)' }}>
       <div className="w-full max-w-sm">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="text-5xl mb-3">♠️</div>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-            Poker App
-          </h1>
-          <p className="text-gray-500 text-sm mt-1">Tu estudio de póker personal</p>
-        </div>
-
         {/* Card */}
         <div className="bg-gray-800 rounded-2xl p-8 border border-gray-700 shadow-2xl">
+          {/* Logo */}
+          <div className="text-center mb-6">
+            <div className="text-4xl mb-2">♠️</div>
+            <h2 className="text-xl font-bold text-gray-200">
+              {mode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta'}
+            </h2>
+          </div>
+
           {/* Tabs */}
           <div className="flex bg-gray-900 rounded-xl p-1 mb-6">
             <button
@@ -106,10 +109,6 @@ export default function Login() {
             </button>
           </form>
         </div>
-
-        <p className="text-center text-xs text-gray-600 mt-6">
-          Tus datos se guardan localmente en este navegador
-        </p>
       </div>
     </div>
   )
