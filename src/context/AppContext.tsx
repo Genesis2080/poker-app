@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import type { Hand, StudyPlanItem, Flashcard, AppStats, Session } from '../types'
+import { createDefaultFlashcards } from '../data/flashcards'
 
 interface AppData {
   hands: Hand[]
@@ -27,7 +28,7 @@ interface AppContextType {
 const defaultData: AppData = {
   hands: [],
   studyPlan: [],
-  flashcards: [],
+  flashcards: createDefaultFlashcards(),
   sessions: [],
   stats: {
     totalHands: 0,
@@ -52,7 +53,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const saved = localStorage.getItem('practice-app-data')
     if (saved) {
       try {
-        setData(JSON.parse(saved))
+        const parsed = JSON.parse(saved)
+        // Si no tiene flashcards, cargar las por defecto
+        if (!parsed.flashcards || parsed.flashcards.length === 0) {
+          parsed.flashcards = createDefaultFlashcards()
+        }
+        setData(parsed)
       } catch (e) {
         console.error('Failed to load data:', e)
       }

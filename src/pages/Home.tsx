@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useApp } from '../context/AppContext'
 import type { Session, GameModality } from '../types'
 import { Button } from '../components/Button'
@@ -8,10 +8,12 @@ import { useForm } from '../hooks/useForm'
 import { useCalculation } from '../hooks'
 
 export default function Home() {
-  const { data, addSession, deleteSession } = useApp()
+  const { data, addSession, deleteSession, updateFlashcard } = useApp()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modality, setModality] = useState<GameModality>('cash')
   const [filterModality, setFilterModality] = useState<GameModality | 'all'>('all')
+  const [currentCard, setCurrentCard] = useState(0)
+  const [isFlipped, setIsFlipped] = useState(false)
 
   const stats = useCalculation(() => {
     const sessions = data.sessions || []
@@ -334,6 +336,96 @@ export default function Home() {
               })}
           </div>
         </div>
+      )}
+
+      {/* Flashcards */}
+      {data.flashcards && data.flashcards.length > 0 && (
+        <section className="bg-gray-800 rounded-xl p-6 border border-gray-700">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Flashcards</h3>
+            <span className="text-sm text-gray-500">{currentCard + 1} / {data.flashcards.length}</span>
+          </div>
+
+          <div className="flex items-center gap-4">
+            {/* Botón anterior */}
+            <button
+              onClick={() => { setCurrentCard(Math.max(0, currentCard - 1)); setIsFlipped(false) }}
+              disabled={currentCard === 0}
+              className="text-gray-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+            </button>
+
+            {/* Card con flip */}
+            <div className="flex-1 cursor-pointer" style={{ perspective: '600px' }} onClick={() => setIsFlipped(!isFlipped)}>
+              <div
+                className="bg-gray-900 rounded-xl border border-gray-700 min-h-[220px] p-6 transition-all duration-500"
+                style={{ transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)', transformStyle: 'preserve-3d', backfaceVisibility: 'hidden' }}
+              >
+                {!isFlipped ? (
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        (() => {
+                          const card = data.flashcards[currentCard]
+                          return card.difficulty <= 2 ? 'bg-green-900/30 text-green-400' : card.difficulty <= 4 ? 'bg-yellow-900/30 text-yellow-400' : 'bg-red-900/30 text-red-400'
+                        })()
+                      }`}>
+                        {data.flashcards[currentCard].difficulty <= 2 ? 'Fácil' : data.flashcards[currentCard].difficulty <= 4 ? 'Media' : 'Difícil'}
+                      </span>
+                      <span className="text-xs text-gray-500">{data.flashcards[currentCard].category}</span>
+                    </div>
+                    <p className="text-gray-200 text-base leading-relaxed">{data.flashcards[currentCard].question}</p>
+                    <p className="text-xs text-gray-600 mt-4">Toca para ver respuesta</p>
+                  </div>
+                ) : (
+                  <div style={{ transform: 'rotateY(180deg)' }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xs text-green-400">Respuesta</span>
+                    </div>
+                    <p className="text-gray-200 text-sm leading-relaxed">{data.flashcards[currentCard].answer}</p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const card = data.flashcards[currentCard]
+                        updateFlashcard(card.id, {
+                          reviews: card.reviews + 1,
+                        })
+                      }}
+                      className="mt-4 text-xs px-3 py-1.5 bg-green-600/20 text-green-400 rounded-lg hover:bg-green-600/30 transition-colors"
+                    >
+                      ✓ Marcar como estudiada
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Botón siguiente */}
+            <button
+              onClick={() => { setCurrentCard(Math.min(data.flashcards.length - 1, currentCard + 1)); setIsFlipped(false) }}
+              disabled={currentCard === data.flashcards.length - 1}
+              className="text-gray-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Indicador de progreso */}
+          <div className="flex gap-1 mt-4 justify-center">
+            {data.flashcards.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => { setCurrentCard(i); setIsFlipped(false) }}
+                className={`w-2 h-2 rounded-full transition-colors ${i === currentCard ? 'bg-blue-500' : 'bg-gray-600 hover:bg-gray-500'}`}
+              />
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Modal para nueva sesión */}
