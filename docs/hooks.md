@@ -1,103 +1,263 @@
-# Guía de Hooks - Poker App#
+# Guía de Hooks - Poker App
+
+Guía completa de todos los hooks nativos y personalizados utilizados en la aplicación.
+
+---
 
 ## Índice
-1. [useLocalStorage](#uselocalstorage)
-2. [useToggle](#usetoggle)
-3. [useForm](#useform)
-4. [useOptimizedCallback & useCalculation](#useoptimizedcallback--usecalculation)
-5. [Ejemplos de Integración](#ejemplos-de-integración)
+
+1. [Hooks Nativos de React](#hooks-nativos-de-react)
+   - [useState](#usestate)
+   - [useEffect](#useeffect)
+   - [useMemo](#usememo)
+   - [useCallback](#usecallback)
+2. [Hooks Personalizados](#hooks-personalizados)
+   - [useForm](#useform)
+   - [useToggle](#usetoggle)
+   - [useLocalStorage](#uselocalstorage)
+   - [useCalculation](#usecalculation)
+   - [useOptimizedCallback](#useoptimizedcallback)
+3. [Dónde se usa cada Hook](#dónde-se-usa-cada-hook)
+4. [Patrones de Uso en la App](#patrones-de-uso-en-la-app)
+5. [Buenas Prácticas](#buenas-prácticas)
 
 ---
 
-## useLocalStorage#
+## Hooks Nativos de React
 
-### Descripción
-Hook personalizado para gestionar estado persistido en `localStorage` con sincronización automática.
+### useState
 
-### Ubicación
-`src/hooks/useLocalStorage.tsx`
+**Propósito**: Gestionar estado local en componentes funcionales.
 
-### Firma (TypeScript)
+**Firma**:
 ```typescript
-function useLocalStorage<T>(
-  key: string,
-  initialValue: T
-): {
-  value: T
-  setValue: (newValue: T | ((prev: T) => T)) => void
-  remove: () => void
-}
+const [state, setState] = useState<Type>(initialValue)
 ```
 
-### Parámetros
-| Parámetro | Tipo | Descripción |
-|-----------|------|-------------|
-| `key` | `string` | Clave para localStorage |
-| `initialValue` | `T` | Valor inicial si no existe en localStorage |
+**Uso en la app**:
+- `AppContext.tsx`: Estado global de datos y autenticación
+- `Home.tsx`: Estado del modal, filtros, flashcards
+- `Study.tsx`: Filtros, búsqueda, items expandidos
+- `Hands.tsx`: Filtros, búsqueda, modal, mano expandida
+- `Login.tsx`: Email, contraseña, modo login/register, errores
+- Custom hooks: `useForm`, `useToggle`, `useLocalStorage`
 
-### Valores de Retorno
+**Ejemplo**:
+```tsx
+// AppContext - estado global de datos
+const [data, setData] = useState<AppData>(loadData)
+
+// Home - estado local de UI
+const [isModalOpen, setIsModalOpen] = useState(false)
+const [modality, setModality] = useState<GameModality>('cash')
+```
+
+**Notas**:
+- Usa lazy initialization para cargar datos de localStorage antes del render: `useState<AppData>(loadData)`
+- Usa el updater funcional `setData(prev => ...)` para evitar depender del estado actual
+
+---
+
+### useEffect
+
+**Propósito**: Ejecutar efectos secundarios (sincronización con APIs, localStorage, subscripciones).
+
+**Firma**:
+```typescript
+useEffect(() => {
+  // efecto
+  return () => { /* cleanup */ }
+}, [dependencies])
+```
+
+**Uso en la app**:
+- `AppContext.tsx`: Restaurar sesión de Supabase, guardar datos en localStorage
+- `useLocalStorage.tsx`: Sincronizar estado con localStorage
+
+**Ejemplo**:
+```tsx
+// AppContext - restaurar sesión al montar
+useEffect(() => {
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session?.user) setUser(toAuthUser(session.user))
+    setLoading(false)
+  })
+
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    if (session?.user) setUser(toAuthUser(session.user))
+    else setUser(null)
+  })
+
+  return () => subscription.unsubscribe()
+}, [])
+
+// AppContext - guardar datos en localStorage en cada cambio
+useEffect(() => {
+  localStorage.setItem('practice-app-data', JSON.stringify(data))
+}, [data])
+```
+
+**Notas**:
+- El array vacío `[]` ejecuta el efecto solo al montar/desmontar
+- El cleanup `return () => subscription.unsubscribe()` previene memory leaks
+- El efecto con `[data]` como dependencia se ejecuta en cada cambio de datos
+
+---
+
+### useMemo
+
+**Propósito**: Memorizar valores calculados costosos para evitar recalcularlos en cada render.
+
+**Firma**:
+```typescript
+const memoizedValue = useMemo(() => {
+  return expensiveCalculation(a, b)
+}, [a, b])
+```
+
+**Uso en la app**:
+- `Study.tsx`: Cálculos de progreso por calle, filtros, búsqueda
+- `Hands.tsx`: Filtrado y ordenación de manos
+- `Home.tsx` y `Hands.tsx` (via `useCalculation`): Estadísticas de sesiones
+
+**Ejemplo**:
+```tsx
+// Study.tsx - filtrar y ordenar items solo cuando cambian los datos
+const filteredStudyArray = useMemo(() => {
+  let filtered = studyArray
+  if (filter !== 'all') filtered = filtered.filter(i => i.category === filter)
+  if (search.trim()) {
+    const q = search.toLowerCase()
+    filtered = filtered.filter(i =>
+      i.topic.toLowerCase().includes(q) || i.description.toLowerCase().includes(q)
+    )
+  }
+  return filtered
+}, [studyArray, filter, search])
+
+// Home.tsx via useCalculation - estadísticas de sesiones
+const stats = useCalculation(() => {
+  const totalInvested = sessions.reduce((sum, s) => sum + s.buyIn, 0)
+  const roi = totalInvested > 0 ? ((totalWon - totalInvested) / totalInvested) * 100 : 0
+  // ... más cálculos
+  return { totalInvested, roi, chartData, ... }
+}, [data.sessions, filterModality])
+```
+
+**Notas**:
+- Es clave para rendimiento cuando hay listas grandes o cálculos complejos
+- No abuses de `useMemo` para operaciones simples
+- `useCalculation` es un wrapper que mejora la legibilidad
+
+---
+
+### useCallback
+
+**Propósito**: Memorizar funciones para evitar que se creen en cada render, previniendo re-renders innecesarios en componentes hijos.
+
+**Firma**:
+```typescript
+const memoizedFn = useCallback(() => {
+  doSomething(a, b)
+}, [a, b])
+```
+
+**Uso en la app**:
+- `AppContext.tsx`: Todas las funciones del contexto están memorizadas (`addHand`, `addSession`, `deleteSession`, `login`, `logout`, etc.)
+- `useToggle.tsx`: `toggle`, `turnOn`, `turnOff`, `setValue`
+- `useForm.tsx`: `handleChange`, `handleBlur`, `submitForm`, etc.
+
+**Ejemplo**:
+```tsx
+// AppContext - funciones del contexto memorizadas
+const addSession = useCallback((session: Session) => {
+  setData((prev) => {
+    const newSessions = [session, ...prev.sessions]
+    const totalInvested = newSessions.reduce((sum, s) => sum + s.buyIn, 0)
+    const totalWon = newSessions.reduce((sum, s) => sum + s.cashOut, 0)
+    const roi = totalInvested > 0 ? ((totalWon - totalInvested) / totalInvested) * 100 : 0
+    return {
+      ...prev,
+      sessions: newSessions,
+      stats: { ...prev.stats, totalSessions: newSessions.length, totalInvested, totalWon, roi }
+    }
+  })
+}, [])
+
+// useForm - manejadores de eventos memorizados
+const handleChange = useCallback((field: keyof T, value: any) => {
+  setValues(prev => ({ ...prev, [field]: value }))
+  setIsDirty(true)
+  setErrors(prev => ({ ...prev, [field]: undefined }))
+}, [])
+```
+
+**Notas**:
+- Es **fundamental** en contextos: sin `useCallback`, cada render crea nuevas funciones, causando que TODOS los consumidores del contexto se re-rendericen
+- Combinado con `React.memo` en componentes hijos, previene renders innecesarios
+- Las funciones que usan el updater funcional (`setData(prev => ...)`) pueden tener `[]` como dependencias
+
+---
+
+## Hooks Personalizados
+
+### useForm
+
+**Propósito**: Gestión completa de formularios con validación, errores, estado sucio y envío.
+
+**Ubicación**: `src/hooks/useForm.tsx`
+
+**Firma**:
+```typescript
+const form = useForm<T>(
+  initialValues,     // Valores iniciales del formulario
+  validationRules,    // Reglas de validación [{ field, rule }]
+  onSubmit           // Callback al enviar formulario válido
+)
+```
+
+**Retorna**:
 | Propiedad | Tipo | Descripción |
 |-----------|------|-------------|
-| `value` | `T` | Valor actual (tipado) |
-| `setValue` | `(newValue: T \| ((prev: T) => T)) => void` | Actualiza valor y guarda en localStorage |
-| `remove` | `() => void` | Elimina del localStorage y resetea al valor inicial |
+| `values` | `T` | Valores actuales |
+| `errors` | `Partial<Record<keyof T, string>>` | Errores por campo |
+| `isDirty` | `boolean` | Si se ha modificado algún campo |
+| `isValid` | `boolean` | Si no hay errores activos |
+| `handleChange` | `(field, value) => void` | Cambia valor y limpia error |
+| `handleBlur` | `(field) => void` | Valida al salir del campo |
+| `submitForm` | `() => void` | Valida todo y ejecuta onSubmit |
 
-### Características
-- ✅ **Tipado genérico** (`<T>`): Funciona con cualquier tipo de dato
-- ✅ **Hidratación segura**: Maneja errores de JSON.parse
-- ✅ **Sincronización automática**: `useEffect` guarda cambios
-- ✅ **Setter funcional**: Soporta `setValue(prev => !prev)`
-- ✅ **Manejo de errores**: `try/catch` con `console.warn`
+**Hooks usados internamente**: `useState`, `useCallback`
 
-### Ejemplo de Uso
+**Ejemplo de uso** (Home.tsx):
 ```tsx
-import { useLocalStorage } from '../hooks/useLocalStorage'
-
-function Settings() {
-  const { value: theme, setValue: setTheme } = useLocalStorage('theme', 'light')
-  const { value: user, setValue: setUser, remove: logout } = useLocalStorage<User>('user', null)
-
-  return (
-    <div>
-      <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
-        Tema actual: {theme}
-      </button>
-      
-      {user && (
-        <button onClick={logout}>Cerrar sesión</button>
-      )}
-    </div>
-  )
-}
+const { values, errors, handleChange, handleBlur, submitForm } = useForm(
+  { date: today, buyIn: '', cashOut: '', timePlayedMinutes: '' },
+  [
+    { field: 'buyIn', rule: (v) => !v ? 'El dinero invertido es requerido' : null },
+    { field: 'cashOut', rule: (v) => !v ? 'El dinero ganado es requerido' : null },
+  ],
+  (vals) => {
+    addSession({ id: Date.now().toString(), buyIn: parseFloat(vals.buyIn), ... })
+    setIsModalOpen(false)
+  }
+)
 ```
 
 ---
 
-## useToggle#
+### useToggle
 
-### Descripción
-Hook para manejar estados booleanos con múltiples métodos de control.
+**Propósito**: Manejar estados booleanos con métodos explícitos.
 
-### Ubicación
-`src/hooks/useToggle.tsx`
+**Ubicación**: `src/hooks/useToggle.tsx`
 
-### Firma (TypeScript)
+**Firma**:
 ```typescript
-function useToggle(initialValue: boolean = false): {
-  isOn: boolean
-  toggle: () => void
-  turnOn: () => void
-  turnOff: () => void
-  setValue: (value: boolean) => void
-}
+const { isOn, toggle, turnOn, turnOff, setValue } = useToggle(initialValue?: boolean)
 ```
 
-### Parámetros
-| Parámetro | Tipo | Descripción |
-|-----------|------|-------------|
-| `initialValue` | `boolean` | Valor inicial (default: `false`) |
-
-### Valores de Retorno
+**Retorna**:
 | Propiedad | Tipo | Descripción |
 |-----------|------|-------------|
 | `isOn` | `boolean` | Estado actual |
@@ -106,357 +266,140 @@ function useToggle(initialValue: boolean = false): {
 | `turnOff` | `() => void` | Fuerza `false` |
 | `setValue` | `(value: boolean) => void` | Establece valor específico |
 
-### Características
-- ✅ **Métodos múltiples**: `toggle`, `turnOn`, `turnOff`, `setValue`
-- ✅ **useCallback**: Todas las funciones están memorizadas
-- ✅ **Simple**: Ideal para modales, confirmaciones, switches
-
-### Ejemplo de Uso
-```tsx
-import { useToggle } from '../hooks/useToggle'
-
-function ConfirmDialog() {
-  const { isOn: isOpen, turnOn, turnOff } = useToggle(false)
-
-  return (
-    <>
-      <button onClick={turnOn}>Eliminar</button>
-      
-      {isOpen && (
-        <div>
-          <p>¿Estás seguro?</p>
-          <button onClick={turnOff}>Cancelar</button>
-        </div>
-      )}
-    </>
-  )
-}
-```
+**Hooks usados internamente**: `useState`, `useCallback` (todas las funciones están memorizadas)
 
 ---
 
-## useForm#
+### useLocalStorage
 
-### Descripción
-Hook completo para gestión de formularios con validación, errores y manejo de estado sucio (dirty).
+**Propósito**: Estado persistido en localStorage con sincronización automática.
 
-### Ubicación
-`src/hooks/useForm.tsx`
+**Ubicación**: `src/hooks/useLocalStorage.tsx`
 
-### Firma (TypeScript)
+**Firma**:
 ```typescript
-interface ValidationRule<T> {
-  field: keyof T
-  rule: (value: any, values: T) => string | null
-}
-
-function useForm<T extends Record<string, any>>(
-  initialValues: T,
-  validationRules: ValidationRule<T>[] = [],
-  onSubmit: (values: T) => void
-): {
-  values: T
-  errors: Partial<Record<keyof T, string>>
-  isDirty: boolean
-  isValid: boolean
-  handleChange: (field: keyof T, value: any) => void
-  handleBlur: (field: keyof T) => void
-  setFieldValue: (field: keyof T, value: any) => void
-  setFieldError: (field: keyof T, error: string) => void
-  resetForm: () => void
-  submitForm: () => void
-}
+const { value, setValue, remove } = useLocalStorage<T>(key, initialValue)
 ```
 
-### Parámetros
-| Parámetro | Tipo | Descripción |
-|-----------|------|-------------|
-| `initialValues` | `T` | Valores iniciales del formulario |
-| `validationRules` | `ValidationRule<T>[]` | Reglas de validación |
-| `onSubmit` | `(values: T) => void` | Función al enviar formulario válido |
-
-### Valores de Retorno
+**Retorna**:
 | Propiedad | Tipo | Descripción |
 |-----------|------|-------------|
-| `values` | `T` | Valores actuales de los campos |
-| `errors` | `Partial<Record<keyof T, string>>` | Errores por campo |
-| `isDirty` | `boolean` | Si se han hecho cambios |
-| `isValid` | `boolean` | Si no hay errores |
-| `handleChange` | `(field: keyof T, value: any) => void` | Cambia valor y limpia error |
-| `handleBlur` | `(field: keyof T) => void` | Marca campo tocado y valida |
-| `setFieldValue` | `(field: keyof T, value: any) => void` | Establece valor directo |
-| `setFieldError` | `(field: keyof T, error: string) => void` | Establece error manual |
-| `resetForm` | `() => void` | Resetea a valores iniciales |
-| `submitForm` | `() => void` | Valida y envía si es válido |
+| `value` | `T` | Valor actual (tipado genérico) |
+| `setValue` | `(value: T \| ((prev: T) => T)) => void` | Actualiza y persiste |
+| `remove` | `() => void` | Elimina y resetea a valor inicial |
 
-### Características
-- ✅ **Tipado genérico**: `useForm<MyFormValues>(...)`
-- ✅ **Validación**: Reglas personalizadas por campo
-- ✅ **Estado sucio**: Sabe si se han hecho cambios
-- ✅ **Validación al blur**: `handleBlur` valida cuando sales del campo
-- ✅ **Limpieza de errores**: `handleChange` limpia error al escribir
-- ✅ **useCallback**: Funciones memorizadas para evitar re-renders
-
-### Ejemplo de Uso
-```tsx
-import { useForm } from '../hooks/useForm'
-
-interface HandForm {
-  position: string
-  result: string
-  stakes: string
-}
-
-const validationRules = [
-  {
-    field: 'position',
-    rule: (value) => !value ? 'La posición es requerida' : null
-  },
-  {
-    field: 'result',
-    rule: (value) => !value ? 'El resultado es requerido' : null
-  }
-]
-
-function NewHandModal({ isOpen, onClose }) {
-  const { values, errors, handleChange, handleBlur, resetForm, submitForm } = useForm<HandForm>(
-    { position: '', result: '', stakes: '' },
-    validationRules,
-    (values) => {
-      console.log('Enviado:', values)
-      resetForm()
-      onClose()
-    }
-  )
-
-  return (
-    <form onSubmit={(e) => { e.preventDefault(); submitForm() }}>
-      <input
-        value={values.position}
-        onChange={(e) => handleChange('position', e.target.value)}
-        onBlur={() => handleBlur('position')}
-      />
-      {errors.position && <span className="error">{errors.position}</span>}
-      
-      <button type="submit">Guardar</button>
-    </form>
-  )
-}
-```
+**Hooks usados internamente**: `useState` (con lazy initialization), `useEffect`
 
 ---
 
-## useOptimizedCallback & useCalculation#
+### useCalculation
 
-### Descripción
-Utilidades para optimizar rendimiento: versiones memorizadas de `useCallback` y `useMemo` con tipado mejorado.
+**Propósito**: Wrapper de `useMemo` para cálculos costosos con sintaxis más limpia.
 
-### Ubicación
-`src/hooks/index.tsx`
+**Ubicación**: `src/hooks/index.tsx`
 
-### Frimas (TypeScript)
+**Firma**:
 ```typescript
-function useOptimizedCallback<T extends (...args: any[]) => any>(
-  callback: T,
-  deps: DependencyList
-): T
-
-function useCalculation<T>(
-  calculate: () => T,
-  deps: DependencyList
-): T
+const result = useCalculation(calculate, deps)
 ```
 
-### Características de `useOptimizedCallback`
-- ✅ **Tipado preservado**: Mantiene la firma de la función original
-- ✅ **Evita warnings**: Deshabilita la regla `react-hooks/exhaustive-deps`
-- ✅ **Mismo comportamiento**: Identico a `useCallback` pero con mejor DX
-
-### Características de `useCalculation`
-- ✅ **Cálculos costosos**: Memoriza resultados de funciones puras
-- ✅ **Sin warning**: Deshabilita `react-hooks/exhaustive-deps`
-- ✅ **Reemplaza useMemo**: Sintaxis más limpia para cálculos
-
-### Ejemplos de Uso
+**Ejemplo**:
 ```tsx
-import { useOptimizedCallback, useCalculation } from '../hooks'
-
-// useOptimizedCallback - Para funciones de evento
-function StudyItem({ item }) {
-  const handleToggle = useOptimizedCallback(
-    () => {
-      toggleItem(item.id) // No necesitas incluir toggleItem en deps
-    },
-    [item.id] // Pero sí necesitas las dependencias reales
-  )
-
-  return <button onClick={handleToggle}>{item.topic}</button>
-}
-
-// useCalculation - Para cálculos costosos
-function ProgressBar({ studyArray }) {
-  const overallProgress = useCalculation(() => {
-    const completed = studyArray.filter(i => i.completed).length
-    return {
-      completed,
-      total: studyArray.length,
-      percentage: Math.round((completed / studyArray.length) * 100)
-    }
-  }, [studyArray])
-
-  return <div style={{ width: `${overallProgress.percentage}%` }} />
-}
-```
-
----
-
-## Ejemplos de Integración#
-
-### 1. Plan de Estudios (Study.tsx)
-```tsx
-import { useCalculation } from '../hooks'
-import { useToggle } from '../hooks'
-
-function StudySection({ items, onToggle }) {
-  // Cálculo memoizado de progreso
-  const progress = useCalculation(() => {
-    const completed = items.filter(i => i.completed).length
-    return {
-      completed,
-      percentage: items.length > 0 ? Math.round((completed / items.length) * 100) : 0
-    }
-  }, [items])
-
-  // Toggle para expandir sección
-  const { isOn: isExpanded, toggle: toggleExpand } = useToggle()
-
-  return (
-    <div>
-      <div onClick={toggleExpand}>
-        Progreso: {progress.percentage}%
-      </div>
-      {isExpanded && (
-        <div>
-          {items.map(item => (
-            <div key={item.id} onClick={() => onToggle(item.id)}>
-              {item.topic}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-```
-
-### 2. Formulario de Mano (Hands.tsx - Futuro)
-```tsx
-import { useForm } from '../hooks/useForm'
-import { useLocalStorage } from '../hooks/useLocalStorage'
-
-function HandForm() {
-  // Persistir borrador en localStorage
-  const { value: draft, setValue: setDraft } = useLocalStorage('hand-draft', null)
-
-  // Hook de formulario con validación
-  const { values, errors, handleChange, submitForm } = useForm(
-    draft || { position: '', result: '', heroHand: '' },
-    [
-      { field: 'position', rule: (v) => !v ? 'Requerido' : null },
-      { field: 'heroHand', rule: (v) => !v ? 'Requerido' : null }
-    ],
-    (vals) => {
-      console.log('Guardando mano:', vals)
-      setDraft(null) // Limpiar borrador
-    }
-  )
-
-  return (
-    <form onSubmit={(e) => { e.preventDefault(); submitForm() }}>
-      <input
-        value={values.position}
-        onChange={(e) => {
-          handleChange('position', e.target.value)
-          setDraft({ ...values, position: e.target.value }) // Guardar borrador
-        }}
-      />
-      {errors.position && <span>{errors.position}</span>}
-      <button type="submit">Guardar</button>
-    </form>
-  )
-}
-```
-
-### 3. Modal con useToggle
-```tsx
-import { useToggle } from '../hooks/useToggle'
-import { Modal } from '../components/Modal'
-
-function PageHeader() {
-  const { isOn: isModalOpen, turnOn, turnOff } = useToggle()
-
-  return (
-    <>
-      <button onClick={turnOn}>Nueva Mano</button>
-      
-      <Modal isOpen={isModalOpen} onClose={turnOff} title="Nueva Mano">
-        {/* Contenido del modal */}
-      </Modal>
-    </>
-  )
-}
-```
-
----
-
-## Convenciones de Hooks#
-
-### Nombrado
-- **Archivos**: `use[PascalCase].tsx` (ej. `useLocalStorage.tsx`)
-- **Funciones**: `use[CamelCase]` (ej. `useToggle`, `useForm`)
-- **Índice**: `index.tsx` para exportar múltiples hooks
-
-### Estructura de un Hook
-```tsx
-import { useState, useCallback, useEffect } from 'react'
-
-interface MiHookResult {
-  // Valores de retorno tipados
-}
-
-export function useMiHook(param: string): MiHookResult {
-  const [state, setState] = useState()
-  
-  const memoizedFn = useCallback(() => {
-    // Lógica
-  }, [])
-  
-  useEffect(() => {
-    // Efectos
-  }, [param])
-  
+const stats = useCalculation(() => {
   return {
-    // Valores
+    totalInvested: sessions.reduce((sum, s) => sum + s.buyIn, 0),
+    roi: ...,
+    chartData: ...
   }
-}
+}, [sessions])
 ```
 
-### Documentación
-- ✅ JSDoc para describir el hook
-- ✅ Interfaz de tipos explícita
-- ✅ Ejemplos de uso en `docs/hooks.md`
-- ✅ Comentarios solo para lógica compleja
+**Hook interno**: `useMemo` (es un wrapper directo)
 
 ---
 
-## Diferencias entre Hooks Nativos y Personalizados#
+### useOptimizedCallback
 
-| Hook | Nativo | Personalizado |
-|------|--------|---------------|
-| **useState** | `useState(initialValue)` | `useLocalStorage(key, initialValue)` |
-| **useCallback** | `useCallback(fn, deps)` | `useOptimizedCallback(fn, deps)` |
-| **useMemo** | `useMemo(fn, deps)` | `useCalculation(fn, deps)` |
-| **useEffect** | `useEffect(fn, deps)` | Usado dentro de `useLocalStorage` para persistir |
+**Propósito**: Wrapper de `useCallback` con tipado preservado.
+
+**Ubicación**: `src/hooks/index.tsx`
+
+**Firma**:
+```typescript
+const memoizedFn = useOptimizedCallback(fn, deps)
+```
+
+**Hook interno**: `useCallback` (es un wrapper directo)
+
+---
+
+## Dónde se usa cada Hook
+
+| Archivo | useState | useEffect | useMemo | useCallback | Custom Hooks |
+|---------|----------|-----------|---------|-------------|--------------|
+| `AppContext.tsx` | ✅ data, user, loading | ✅ localStorage, auth | ❌ | ✅ Todas las funciones | ❌ |
+| `Home.tsx` | ✅ Modal, filtros, flashcards | ❌ | ✅ via useCalculation | ❌ | `useForm`, `useCalculation` |
+| `Study.tsx` | ✅ Filtro, búsqueda, expandido | ❌ | ✅ Progreso, filtros | ❌ | ❌ |
+| `Hands.tsx` | ✅ Modal, filtros, expandido | ❌ | ✅ Filtrado de manos | ❌ | `useForm`, `useCalculation` |
+| `Login.tsx` | ✅ Email, password, error | ❌ | ❌ | ❌ | ❌ |
+| `App.tsx` | ❌ | ❌ | ❌ | ❌ | ❌ |
+| `useForm.tsx` | ✅ values, errors, touched | ❌ | ❌ | ✅ handleChange, handleBlur, etc. | ❌ |
+| `useToggle.tsx` | ✅ isOn | ❌ | ❌ | ✅ toggle, turnOn, turnOff | ❌ |
+| `useLocalStorage.tsx` | ✅ value | ✅ sync | ❌ | ❌ | ❌ |
+
+---
+
+## Patrones de Uso en la App
+
+### 1. Contexto con useCallback (AppContext)
+
+Todas las funciones del contexto están envueltas en `useCallback(fn, [])` porque:
+- Usan el updater funcional `setData(prev => ...)` → no dependen del estado actual
+- Dependencias: `supabase` es un módulo global, `setData` es estable
+- Beneficio: los consumidores del contexto no se re-renderizan cuando las funciones cambian
+
+### 2. Cálculos Memorizados con useMemo (Study / Hands)
+
+Los cálculos de progreso y filtrado se memorizan porque:
+- Operan sobre arrays que pueden ser grandes (listas de manos, items de estudio)
+- Se recalculan solo cuando cambian sus dependencias (datos, filtros)
+- `useCalculation` es un alias para mejorar la legibilidad
+
+### 3. Formularios con useForm (Home / Hands)
+
+El hook `useForm` encapsula:
+- Estado de valores, errores y campos tocados (useState)
+- Validación al escribir y al salir del campo (useCallback)
+- Envío solo si es válido (submitForm)
+- Las funciones están memorizadas para evitar re-renders
+
+### 4. Persistencia con useLocalStorage
+
+El hook `useLocalStorage`:
+- Carga datos con lazy initialization → no bloquea el render
+- Sincroniza cambios con `useEffect` → actualiza localStorage automáticamente
+- Manejo de errores con try/catch → no rompe la app si localStorage falla
+
+### 5. Autenticación con useEffect (AppContext)
+
+El `useEffect` con cleanup:
+- `getSession()` → restaura sesión al montar la app
+- `onAuthStateChange()` → escucha cambios en tiempo real
+- `subscription.unsubscribe()` → previene memory leaks al desmontar
+
+---
+
+## Buenas Prácticas
+
+| Práctica | Por qué |
+|----------|---------|
+| `useCallback(fn, [])` en funciones de contexto | Previene re-renders masivos en todos los consumidores |
+| Lazy initialization en useState | Carga datos antes del primer render, evita sobrescritura |
+| Updater funcional `setData(prev => ...)` | No depende del estado actual, permite `[]` en useCallback |
+| useMemo en listas filtradas | Evita filtrar en cada render, solo cuando cambian datos o filtros |
+| Cleanup en useEffect (`return () => unsubscribe()`) | Previene memory leaks al desmontar componentes |
+| Tipado genérico en custom hooks | Mayor reutilización y seguridad (useForm\<T>, useLocalStorage\<T>) |
+| Funciones memorizadas en hooks | Los consumidores reciben referencias estables |
 
 ---
 

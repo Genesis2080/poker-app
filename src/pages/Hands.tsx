@@ -1,9 +1,11 @@
 import { useState, useMemo } from 'react'
 import { useApp } from '../context/AppContext'
-import type { Hand, GameModality } from '../types'
+import type { GameModality } from '../types'
+import type { Hand } from '../types'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { Modal } from '../components/Modal'
+import { AsyncHandler } from '../components/AsyncHandler'
 import { useForm } from '../hooks/useForm'
 import { useCalculation } from '../hooks'
 
@@ -16,12 +18,13 @@ const RESULTS = [
 ]
 
 export default function Hands() {
-  const { data, addHand, updateHand, deleteHand } = useApp()
+  const { data, addHand, updateHand, deleteHand, dataLoading, dataError, retryLoadData } = useApp()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [filterResult, setFilterResult] = useState<string>('all')
   const [filterPosition, setFilterPosition] = useState<string>('all')
   const [expandedHand, setExpandedHand] = useState<string | null>(null)
+  const [confirmText, setConfirmText] = useState('')
 
   const hands: Hand[] = Array.isArray(data.hands) ? data.hands : []
 
@@ -73,10 +76,15 @@ export default function Hands() {
       )
     }
 
-    return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+    return [...filtered].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
   }, [hands, filterResult, filterPosition, search])
 
-  const { values, errors, handleChange, handleBlur, submitForm } = useForm(
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setConfirmText('')
+  }
+
+  const { values, errors, handleChange, handleBlur, submitForm, submitError } = useForm(
     {
       date: new Date().toISOString().split('T')[0],
       position: 'BTN',
@@ -95,10 +103,9 @@ export default function Hands() {
     [
       { field: 'heroHand', rule: (v) => !v ? 'Las cartas son requeridas' : null },
     ],
-    (vals) => {
+    async (vals) => {
       const tags = vals.tags ? vals.tags.split(',').map(t => t.trim()).filter(Boolean) : []
-      const newHand: Hand = {
-        id: Date.now().toString(),
+      await addHand({
         date: vals.date,
         position: vals.position,
         result: vals.result as 'win' | 'loss' | 'even',
@@ -117,23 +124,32 @@ export default function Hands() {
         tableName: vals.tableName,
         tableFormat: '6-max',
         gameType: 'cash',
-      }
-      addHand(newHand)
+      })
+      setConfirmText('Mano registrada correctamente')
       setIsModalOpen(false)
+      setTimeout(() => setConfirmText(''), 2500)
     }
   )
 
   return (
+    <AsyncHandler loading={dataLoading} error={dataError} onRetry={retryLoadData}>
     <div className="space-y-6">
+        {confirmText && (
+        <div className="fixed top-4 right-4 z-50 bg-green-900/90 text-green-300 px-5 py-3 rounded-xl shadow-2xl border border-green-700/50 backdrop-blur-sm flex items-center gap-2">
+          <span>✅</span>
+          <span className="font-medium">{confirmText}</span>
+        </div>
+        )}
+
       {/* Header elegante */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-green-900/50 to-emerald-900/50 rounded-2xl p-8 border border-green-800/30">
+      <div className="relative overflow-hidden bg-gradient-to-r from-green-900/50 to-emerald-900/50 rounded-2xl p-4 md:p-8 border border-green-800/30">
         <div className="relative z-10">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-green-400 to-emerald-400 bg-clip-text text-transparent">
             Hand History
           </h1>
           <p className="text-gray-400 mt-2">Registra y analiza tus manos jugadas</p>
         </div>
-        <div className="mt-6 flex items-center gap-4">
+        <div className="mt-6 flex items-center gap-4 flex-wrap">
           <div className="bg-gray-800/80 backdrop-blur rounded-xl px-6 py-3 border border-gray-700">
             <div className="text-3xl font-bold text-green-400">{stats.totalHands}</div>
             <div className="text-gray-500 text-xs">Total Manos</div>
@@ -241,7 +257,7 @@ export default function Hands() {
             filteredHands.map(hand => (
               <div key={hand.id} className="px-6 py-4 hover:bg-gray-700/20 transition-colors">
                 <div
-                  className="flex items-center justify-between cursor-pointer"
+                  className="flex items-center justify-between cursor-pointer group"
                   onClick={() => setExpandedHand(expandedHand === hand.id ? null : hand.id)}
                 >
                   <div className="flex items-center gap-4">
@@ -271,9 +287,9 @@ export default function Hands() {
                       </div>
                     )}
                     <button
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation()
-                        deleteHand(hand.id)
+                        try { await deleteHand(hand.id) } catch {}
                       }}
                       className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-red-400 transition-opacity"
                     >
@@ -296,16 +312,17 @@ export default function Hands() {
                       <div><span className="text-gray-500">Notas:</span> {hand.notes}</div>
                     )}
                     <div className="flex gap-4 pt-2">
-                      <button
-                        onClick={() => {
-                          // Toggle studied tag
-                          const hasStudied = hand.tags?.includes('estudiada')
-                          updateHand(hand.id, {
+                    <button
+                      onClick={async () => {
+                        const hasStudied = hand.tags?.includes('estudiada')
+                        try {
+                          await updateHand(hand.id, {
                             tags: hasStudied
                               ? hand.tags.filter(t => t !== 'estudiada')
                               : [...(hand.tags || []), 'estudiada']
                           })
-                        }}
+                        } catch {}
+                      }}
                         className={`text-xs px-3 py-1 rounded ${
                           hand.tags?.includes('estudiada')
                             ? 'bg-green-900/30 text-green-400'
@@ -331,17 +348,17 @@ export default function Hands() {
       {/* Modal para nueva mano */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={handleCloseModal}
         title="Nueva Mano"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={handleCloseModal}>Cancelar</Button>
             <Button onClick={submitForm}>Guardar</Button>
           </>
         }
       >
         <form onSubmit={(e) => { e.preventDefault(); submitForm() }} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Fecha" type="date" value={values.date} onChange={(v) => handleChange('date', v)} onBlur={() => handleBlur('date')} required />
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5">Posición</label>
@@ -357,7 +374,7 @@ export default function Hands() {
             </div>
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Cartas (ej: As Ks)" type="text" value={values.heroHand} onChange={(v) => handleChange('heroHand', v)} onBlur={() => handleBlur('heroHand')} error={errors.heroHand} placeholder="Ah Ks" required />
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5">Resultado</label>
@@ -378,12 +395,16 @@ export default function Hands() {
           <Input label="Notas" type="text" value={values.notes} onChange={(v) => handleChange('notes', v)} placeholder="Observaciones sobre la mano" />
           <Input label="Tags (separados por coma)" type="text" value={values.tags} onChange={(v) => handleChange('tags', v)} placeholder="ej: 3bet, bluff, value" />
           
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Pot Size ($)" type="number" value={values.potSize} onChange={(v) => handleChange('potSize', v)} placeholder="Opcional" />
             <Input label="Ganado ($)" type="number" value={values.potWon} onChange={(v) => handleChange('potWon', v)} placeholder="Si ganaste" />
           </div>
+          {submitError && (
+            <div className="text-sm text-red-400 bg-red-900/20 rounded-lg px-4 py-2.5 text-center">{submitError}</div>
+          )}
         </form>
       </Modal>
     </div>
+    </AsyncHandler>
   )
 }

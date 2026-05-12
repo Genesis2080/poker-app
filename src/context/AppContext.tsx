@@ -1,55 +1,46 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import type { ReactNode } from 'react'
-import type { Hand, StudyPlanItem, Flashcard, AppStats, Session, AuthUser } from '../types'
+import type { Hand, StudyPlanItem, Flashcard, Session, AuthUser } from '../types'
 import { createDefaultFlashcards } from '../data/flashcards'
+import { INITIAL_STUDY_PLAN } from '../data/studyPlan'
 import { supabase } from '../lib/supabase'
 import type { User } from '@supabase/supabase-js'
+import { api, ApiError } from '../api/client'
 
 interface AppData {
   hands: Hand[]
   studyPlan: StudyPlanItem[]
   flashcards: Flashcard[]
   sessions: Session[]
-  stats: AppStats
 }
 
 interface AppContextType {
   data: AppData
-  setData: React.Dispatch<React.SetStateAction<AppData>>
   user: AuthUser | null
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<string | null>
   register: (email: string, password: string, username: string) => Promise<string | null>
   logout: () => Promise<void>
-  loading: boolean
-  addHand: (hand: Hand) => void
-  updateHand: (id: string, updates: Partial<Hand>) => void
-  deleteHand: (id: string) => void
-  addStudyItem: (item: StudyPlanItem) => void
-  toggleStudyItem: (id: string) => void
-  addFlashcard: (card: Flashcard) => void
-  updateFlashcard: (id: string, updates: Partial<Flashcard>) => void
-  addSession: (session: Session) => void
-  deleteSession: (id: string) => void
+  authLoading: boolean
+  dataLoading: boolean
+  dataError: string | null
+  retryLoadData: () => Promise<void>
+  addHand: (hand: Omit<Hand, 'id'>) => Promise<void>
+  updateHand: (id: string, updates: Partial<Hand>) => Promise<void>
+  deleteHand: (id: string) => Promise<void>
+  addStudyItem: (item: Omit<StudyPlanItem, 'id' | 'completed'>) => Promise<void>
+  toggleStudyItem: (id: string) => Promise<void>
+  addFlashcard: (card: Omit<Flashcard, 'id'>) => Promise<void>
+  updateFlashcard: (id: string, updates: Partial<Flashcard>) => Promise<void>
+  addSession: (session: Omit<Session, 'id'>) => Promise<void>
+  deleteSession: (id: string) => Promise<void>
 }
 
-const defaultData: AppData = {
+const emptyData: AppData = {
   hands: [],
   studyPlan: [],
-  flashcards: createDefaultFlashcards(),
+  flashcards: [],
   sessions: [],
-  stats: {
-    totalHands: 0,
-    winRate: 0,
-    vpip: 0,
-    pfr: 0,
-    threeBet: 0,
-    cbet: 0,
-    totalSessions: 0,
-    totalInvested: 0,
-    totalWon: 0,
-    roi: 0,
-  },
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined)
@@ -61,35 +52,20 @@ function toAuthUser(sbUser: User): AuthUser {
   }
 }
 
-function loadData(): AppData {
-  const saved = localStorage.getItem('practice-app-data')
-  if (saved) {
-    try {
-      const parsed = JSON.parse(saved)
-      if (!parsed.flashcards || parsed.flashcards.length === 0) {
-        parsed.flashcards = createDefaultFlashcards()
-      }
-      return parsed
-    } catch (e) {
-      console.error('Failed to load data:', e)
-    }
-  }
-  return defaultData
-}
-
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<AppData>(loadData)
+  const [data, setData] = useState<AppData>(emptyData)
   const [user, setUser] = useState<AuthUser | null>(null)
-  const [loading, setLoading] = useState(true)
-  const isAuthenticated = user !== null
+  const [authLoading, setAuthLoading] = useState(true)
+  const [dataLoading, setDataLoading] = useState(true)
+  const [dataError, setDataError] = useState<string | null>(null)
 
-  // Solo restaurar sesión de Supabase
+  // Restaurar sesión de Supabase
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setUser(toAuthUser(session.user))
       }
-      setLoading(false)
+      setAuthLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -103,134 +79,140 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  useEffect(() => {
-    localStorage.setItem('practice-app-data', JSON.stringify(data))
-  }, [data])
+  const loadAllData = useCallback(async () => {
+    setDataLoading(true)
+    setDataError(null)
+    try {
+      const [sessions, hands, studyPlan, flashcards] = await Promise.all([
+        api.sessions.list(),
+        api.hands.list(),
+        api.study.list(),
+        api.flashcards.list(),
+      ])
 
-  const login = async (email: string, password: string): Promise<string | null> => {
+      let finalFlashcards = flashcards
+      if (flashcards.length === 0) {
+        const defaults = createDefaultFlashcards()
+        finalFlashcards = await Promise.all(
+          defaults.map((card) => api.flashcards.create(card))
+        )
+      }
+
+      let finalStudyPlan = studyPlan
+      if (studyPlan.length === 0) {
+        const allItems = Object.values(INITIAL_STUDY_PLAN).flat()
+        finalStudyPlan = await Promise.all(
+          allItems.map((item) => api.study.create(item))
+        )
+      }
+
+      setData({ sessions, hands, studyPlan: finalStudyPlan, flashcards: finalFlashcards })
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : 'Error al cargar datos'
+      setDataError(msg)
+    } finally {
+      setDataLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadAllData()
+  }, [loadAllData])
+
+  // Auth
+  const isAuthenticated = user !== null
+
+  const login = useCallback(async (email: string, password: string): Promise<string | null> => {
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     return error?.message || null
-  }
+  }, [])
 
-  const register = async (email: string, password: string, username: string): Promise<string | null> => {
+  const register = useCallback(async (email: string, password: string, username: string): Promise<string | null> => {
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { username } },
     })
     return error?.message || null
-  }
+  }, [])
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     await supabase.auth.signOut()
-  }
+  }, [])
 
-  const addHand = (hand: Hand) => {
+  // CRUD: Sessions
+  const addSession = useCallback(async (payload: Omit<Session, 'id'>) => {
+    const created = await api.sessions.create(payload)
+    setData((prev) => ({ ...prev, sessions: [created, ...prev.sessions] }))
+  }, [])
+
+  const deleteSession = useCallback(async (id: string) => {
+    await api.sessions.delete(id)
+    setData((prev) => ({ ...prev, sessions: prev.sessions.filter((s) => s.id !== id) }))
+  }, [])
+
+  // CRUD: Hands
+  const addHand = useCallback(async (payload: Omit<Hand, 'id'>) => {
+    const created = await api.hands.create(payload)
+    setData((prev) => ({ ...prev, hands: [created, ...prev.hands] }))
+  }, [])
+
+  const updateHand = useCallback(async (id: string, updates: Partial<Hand>) => {
+    const updated = await api.hands.patch(id, updates)
     setData((prev) => ({
       ...prev,
-      hands: [hand, ...prev.hands],
+      hands: prev.hands.map((h) => (h.id === id ? updated : h)),
     }))
-  }
+  }, [])
 
-  const updateHand = (id: string, updates: Partial<Hand>) => {
-    setData((prev) => ({
-      ...prev,
-      hands: prev.hands.map((h) => (h.id === id ? { ...h, ...updates } : h)),
-    }))
-  }
+  const deleteHand = useCallback(async (id: string) => {
+    await api.hands.delete(id)
+    setData((prev) => ({ ...prev, hands: prev.hands.filter((h) => h.id !== id) }))
+  }, [])
 
-  const deleteHand = (id: string) => {
-    setData((prev) => ({
-      ...prev,
-      hands: prev.hands.filter((h) => h.id !== id),
-    }))
-  }
+  // CRUD: Study
+  const addStudyItem = useCallback(async (payload: Omit<StudyPlanItem, 'id' | 'completed'>) => {
+    const created = await api.study.create(payload)
+    setData((prev) => ({ ...prev, studyPlan: [...prev.studyPlan, created] }))
+  }, [])
 
-  const addStudyItem = (item: StudyPlanItem) => {
-    setData((prev) => ({
-      ...prev,
-      studyPlan: [...prev.studyPlan, item],
-    }))
-  }
-
-  const toggleStudyItem = (id: string) => {
+  const toggleStudyItem = useCallback(async (id: string) => {
+    const updated = await api.study.toggle(id)
     setData((prev) => ({
       ...prev,
       studyPlan: prev.studyPlan.map((item) =>
-        item.id === id ? { ...item, completed: !item.completed } : item
+        item.id === id ? updated : item
       ),
     }))
-  }
+  }, [])
 
-  const addFlashcard = (card: Flashcard) => {
+  // CRUD: Flashcards
+  const addFlashcard = useCallback(async (payload: Omit<Flashcard, 'id'>) => {
+    const created = await api.flashcards.create(payload)
+    setData((prev) => ({ ...prev, flashcards: [...prev.flashcards, created] }))
+  }, [])
+
+  const updateFlashcard = useCallback(async (id: string, updates: Partial<Flashcard>) => {
+    const updated = await api.flashcards.patch(id, updates)
     setData((prev) => ({
       ...prev,
-      flashcards: [...prev.flashcards, card],
+      flashcards: prev.flashcards.map((f) => (f.id === id ? updated : f)),
     }))
-  }
-
-  const updateFlashcard = (id: string, updates: Partial<Flashcard>) => {
-    setData((prev) => ({
-      ...prev,
-      flashcards: prev.flashcards.map((f) =>
-        f.id === id ? { ...f, ...updates } : f
-      ),
-    }))
-  }
-
-  const addSession = (session: Session) => {
-    setData((prev) => {
-      const newSessions = [session, ...prev.sessions]
-      const totalInvested = newSessions.reduce((sum, s) => sum + s.buyIn, 0)
-      const totalWon = newSessions.reduce((sum, s) => sum + s.cashOut, 0)
-      const roi = totalInvested > 0 ? ((totalWon - totalInvested) / totalInvested) * 100 : 0
-      
-      return {
-        ...prev,
-        sessions: newSessions,
-        stats: {
-          ...prev.stats,
-          totalSessions: newSessions.length,
-          totalInvested,
-          totalWon,
-          roi: Math.round(roi * 100) / 100,
-        }
-      }
-    })
-  }
-
-  const deleteSession = (id: string) => {
-    setData((prev) => {
-      const newSessions = prev.sessions.filter((s) => s.id !== id)
-      const totalInvested = newSessions.reduce((sum, s) => sum + s.buyIn, 0)
-      const totalWon = newSessions.reduce((sum, s) => sum + s.cashOut, 0)
-      const roi = totalInvested > 0 ? ((totalWon - totalInvested) / totalInvested) * 100 : 0
-      
-      return {
-        ...prev,
-        sessions: newSessions,
-        stats: {
-          ...prev.stats,
-          totalSessions: newSessions.length,
-          totalInvested,
-          totalWon,
-          roi: Math.round(roi * 100) / 100,
-        }
-      }
-    })
-  }
+  }, [])
 
   return (
     <AppContext.Provider
       value={{
         data,
-        setData,
         user,
         isAuthenticated,
         login,
         register,
         logout,
-        loading,
+        authLoading,
+        dataLoading,
+        dataError,
+        retryLoadData: loadAllData,
         addHand,
         updateHand,
         deleteHand,

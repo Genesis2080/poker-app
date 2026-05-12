@@ -1,36 +1,20 @@
 import { useState, useMemo } from 'react'
 import type { StudyPlanItem } from '../types'
 import { useApp } from '../context/AppContext'
-import { Button } from '../components/Button'
-import { Input } from '../components/Input'
+import { AsyncHandler } from '../components/AsyncHandler'
 import {
   STREET_ORDER,
   STREET_COLORS,
   STREET_LABELS,
   CATEGORY_COLORS,
-  INITIAL_STUDY_PLAN,
 } from '../data/studyPlan'
 
 export default function Study() {
-  const { data, setData } = useApp()
+  const { data, toggleStudyItem, dataLoading, dataError, retryLoadData } = useApp()
   const [filter, setFilter] = useState('all')
   const [search, setSearch] = useState('')
 
   const studyArray: StudyPlanItem[] = Array.isArray(data.studyPlan) ? data.studyPlan : []
-
-  const toggleItem = (itemId: string) => {
-    setData(prev => ({
-      ...prev,
-      studyPlan: prev.studyPlan.map(item =>
-        item.id === itemId ? { ...item, completed: !item.completed } : item
-      ),
-    }))
-  }
-
-  const resetAll = () => {
-    const allItems = Object.values(INITIAL_STUDY_PLAN).flat()
-    setData(prev => ({ ...prev, studyPlan: JSON.parse(JSON.stringify(allItems)) }))
-  }
 
   const overall = useMemo(() => {
     const completed = studyArray.filter(i => i.completed).length
@@ -63,249 +47,138 @@ export default function Study() {
     return result
   }, [studyArray])
 
-  const categories = useMemo(() => {
-    const cats = new Set<string>()
-    studyArray.forEach(i => cats.add(i.category))
-    return Array.from(cats)
-  }, [studyArray])
-
-  const filteredStudyArray = useMemo(() => {
-    let filtered = studyArray
+  const filtered = useMemo(() => {
+    let items = studyArray
     if (filter !== 'all') {
-      filtered = filtered.filter(i => i.category === filter)
+      items = items.filter(i => i.street === filter)
     }
     if (search.trim()) {
       const q = search.toLowerCase()
-      filtered = filtered.filter(i =>
-        i.topic.toLowerCase().includes(q) || i.description.toLowerCase().includes(q)
+      items = items.filter(i =>
+        i.topic.toLowerCase().includes(q) ||
+        i.description.toLowerCase().includes(q)
       )
     }
-    return filtered
+    return items
   }, [studyArray, filter, search])
 
-  const streetData = useMemo(() => {
-    return STREET_ORDER.map(street => {
-      const items = filteredStudyArray.filter(i => i.street === street)
-      const completed = items.filter(i => i.completed).length
-      return {
-        street,
-        label: STREET_LABELS[street],
-        colors: STREET_COLORS[street],
-        items,
-        completed,
-        total: items.length,
-        percentage: items.length > 0 ? Math.round((completed / items.length) * 100) : 0,
-      }
-    })
-  }, [filteredStudyArray])
-
-  const generalItems = useMemo(() => {
-    const items = filteredStudyArray.filter(i => i.street === 'general')
-    const completed = items.filter(i => i.completed).length
-    return { items, completed, total: items.length, percentage: items.length > 0 ? Math.round((completed / items.length) * 100) : 0 }
-  }, [filteredStudyArray])
-
   return (
+    <AsyncHandler loading={dataLoading} error={dataError} onRetry={retryLoadData}>
     <div className="space-y-6">
-      {/* Header elegante */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-indigo-900/50 to-purple-900/50 rounded-2xl p-8 border border-indigo-800/30">
-        <div className="relative z-10">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-            Plan de Estudios
-          </h1>
-          <p className="text-gray-400 mt-2">Domina el póker calle por calle</p>
-        </div>
-        <div className="mt-6 flex items-center gap-4">
-          <div className="bg-gray-800/80 backdrop-blur rounded-xl px-6 py-3 border border-gray-700">
-            <div className="text-3xl font-bold text-indigo-400">{overall.percentage}%</div>
-            <div className="text-gray-500 text-xs">Progreso total</div>
-          </div>
-          <div className="bg-gray-800/80 backdrop-blur rounded-xl px-6 py-3 border border-gray-700">
-            <div className="text-3xl font-bold text-green-400">{overall.completed}<span className="text-gray-500 text-lg">/{overall.total}</span></div>
-            <div className="text-gray-500 text-xs">Temas completados</div>
-          </div>
-          <Button variant="ghost" onClick={resetAll} className="ml-auto">
-            Resetear todo
-          </Button>
-        </div>
+      {/* Header */}
+      <div className="bg-gradient-to-r from-purple-900/40 to-indigo-900/40 rounded-2xl p-4 md:p-8 border border-purple-800/30">
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+          Plan de Estudio
+        </h1>
+        <p className="text-gray-400 mt-2">Sigue tu progreso en cada área del póker</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Sidebar */}
-        <div className="lg:col-span-1 space-y-4">
-          {/* Search */}
-          <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <Input
-              label="Buscar tema"
-              type="text"
-              value={search}
-              onChange={setSearch}
-              placeholder="Ej: c-bet, flush..."
-              noMargin
-            />
-          </div>
-
-          {/* Filtros por categoría */}
-          <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Categorías</h4>
-            <div className="space-y-1">
-              <button
-                onClick={() => setFilter('all')}
-                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                  filter === 'all' ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50'
-                }`}
-              >
-                Todas
-              </button>
-              {categories.map(cat => {
-                const colors = CATEGORY_COLORS[cat]
-                return (
-                  <button
-                    key={cat}
-                    onClick={() => setFilter(filter === cat ? 'all' : cat)}
-                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2 ${
-                      filter === cat ? 'bg-gray-700 text-white' : 'text-gray-400 hover:bg-gray-700/50'
-                    }`}
-                  >
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: colors?.text || '#666' }}></span>
-                    {colors?.label || cat}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* Progreso por calle */}
-          <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Por Calle</h4>
-            <div className="space-y-3">
-              {STREET_ORDER.map(street => {
-                const p = byStreet[street] || { percentage: 0, completed: 0, total: 0 }
-                const colors = STREET_COLORS[street]
-                return (
-                  <div key={street}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span style={{ color: colors.text }}>{STREET_LABELS[street]}</span>
-                      <span className="text-gray-500">{p.completed}/{p.total}</span>
-                    </div>
-                    <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-300"
-                        style={{ width: `${p.percentage}%`, backgroundColor: colors.text }}
-                      ></div>
-                    </div>
-                  </div>
-                )
-              })}
-              <div>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-indigo-400">General</span>
-                  <span className="text-gray-500">{byStreet.general?.completed || 0}/{byStreet.general?.total || 0}</span>
-                </div>
-                <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-indigo-500 transition-all duration-300"
-                    style={{ width: `${byStreet.general?.percentage || 0}%` }}
-                  ></div>
-                </div>
-              </div>
-            </div>
-          </div>
+      {/* Progreso general */}
+      <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-200">Progreso General</h2>
+          <span className="text-2xl font-bold text-purple-400">{overall.percentage}%</span>
         </div>
-
-        {/* Main Content */}
-        <div className="lg:col-span-3 space-y-4">
-          {streetData.map(({ street, label, colors, items, completed, total, percentage }) => (
-            <div key={street} className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-              <div className="px-6 py-4 flex items-center justify-between" style={{ backgroundColor: `${colors.bg}` }}>
-                <div className="flex items-center gap-3">
-                  <span className="font-semibold" style={{ color: colors.text }}>{label}</span>
-                  <span className="text-xs px-2 py-1 rounded-full" style={{ backgroundColor: `${colors.text}20`, color: colors.text }}>
-                    {completed}/{total}
-                  </span>
-                </div>
-                <span className="text-sm font-mono" style={{ color: colors.text }}>{percentage}%</span>
-              </div>
-              <div className="divide-y divide-gray-700/50">
-                {items.map(item => (
-                  <StudyItem key={item.id} item={item} onToggle={() => toggleItem(item.id)} />
-                ))}
-                {items.length === 0 && (
-                  <div className="px-6 py-8 text-center text-gray-500 text-sm">
-                    No hay temas en esta categoría
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {/* General Section */}
-          <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-            <div className="px-6 py-4 flex items-center justify-between" style={{ backgroundColor: 'rgba(99,102,241,0.08)' }}>
-              <div className="flex items-center gap-3">
-                <span className="font-semibold text-indigo-400">General</span>
-                <span className="text-xs px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-400">
-                  {generalItems.completed}/{generalItems.total}
-                </span>
-              </div>
-              <span className="text-sm font-mono text-indigo-400">{generalItems.percentage}%</span>
-            </div>
-            <div className="divide-y divide-gray-700/50">
-              {generalItems.items.map(item => (
-                <StudyItem key={item.id} item={item} onToggle={() => toggleItem(item.id)} />
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function StudyItem({ item, onToggle }: { item: StudyPlanItem; onToggle: () => void }) {
-  const [expanded, setExpanded] = useState(false)
-  const catColors = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.fundamentos
-
-  return (
-    <div className={`px-6 py-4 transition-colors ${expanded ? 'bg-gray-700/30' : 'hover:bg-gray-700/20'}`}>
-      <div className="flex items-start gap-3">
-        <button
-          onClick={onToggle}
-          className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
-            item.completed
-              ? 'bg-green-500 border-green-500'
-              : 'border-gray-600 hover:border-gray-500'
-          }`}
-        >
-          {item.completed && (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2 6L5 9L10 3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-        </button>
-        <div className="flex-1 min-w-0">
+        <div className="w-full bg-gray-700 rounded-full h-3 overflow-hidden">
           <div
-            className={`text-sm cursor-pointer ${item.completed ? 'text-gray-500 line-through' : 'text-gray-200'}`}
-            onClick={() => setExpanded(!expanded)}
-          >
-            {item.topic}
-          </div>
-          <div className="flex items-center gap-2 mt-1">
-            <span
-              className="text-xs px-2 py-0.5 rounded"
-              style={{ backgroundColor: `${catColors.bg}`, color: catColors.text }}
-            >
-              {catColors.label}
-            </span>
-            <span className="text-xs text-gray-500">{expanded ? '▲' : '▼'}</span>
-          </div>
+            className="h-full rounded-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-500"
+            style={{ width: `${overall.percentage}%` }}
+          />
         </div>
+        <p className="text-gray-500 text-sm mt-2">{overall.completed} de {overall.total} completados</p>
       </div>
-      {expanded && (
-        <div className="mt-3 ml-8 p-4 bg-gray-900/50 rounded-lg text-sm text-gray-400 leading-relaxed">
-          {item.description}
-        </div>
-      )}
+
+      {/* Progreso por calle */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {[...STREET_ORDER, 'general' as const].map(street => {
+          const stat = byStreet[street]
+          const colors = STREET_COLORS[street as keyof typeof STREET_COLORS] || { bg: 'rgba(107,114,128,0.08)', border: 'rgba(107,114,128,0.2)', text: '#9ca3af' }
+          return (
+            <button
+              key={street}
+              onClick={() => setFilter(filter === street ? 'all' : street)}
+              className={`rounded-xl p-4 border text-left transition-all ${
+                filter === street ? 'ring-2 ring-purple-500' : ''
+              }`}
+              style={{ backgroundColor: colors.bg, borderColor: colors.border }}
+            >
+              <div className="text-sm font-medium" style={{ color: colors.text }}>
+                {STREET_LABELS[street] || street.charAt(0).toUpperCase() + street.slice(1)}
+              </div>
+              <div className="text-2xl font-bold text-gray-200 mt-1">{stat.percentage}%</div>
+              <div className="text-xs text-gray-500 mt-1">{stat.completed}/{stat.total}</div>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Buscador */}
+      <input
+        type="text"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Buscar temas..."
+        className="w-full px-4 py-3 bg-gray-800 border border-gray-700 rounded-xl text-gray-100 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+      />
+
+      {/* Lista de temas */}
+      <div className="space-y-2">
+        {filtered.map((item) => {
+          const colors = STREET_COLORS[item.street as keyof typeof STREET_COLORS] || { bg: 'rgba(107,114,128,0.08)', border: 'rgba(107,114,128,0.2)', text: '#9ca3af' }
+          const catColor = CATEGORY_COLORS[item.category]
+          return (
+            <div
+              key={item.id}
+              onClick={() => toggleStudyItem(item.id)}
+              className="bg-gray-800 rounded-xl p-5 border border-gray-700 hover:border-gray-600 cursor-pointer transition-all"
+            >
+              <div className="flex items-start gap-4">
+                <div className={`mt-1 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                  item.completed ? 'bg-green-500 border-green-500' : 'border-gray-500'
+                }`}>
+                  {item.completed && (
+                    <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className={`font-medium ${item.completed ? 'text-gray-500 line-through' : 'text-gray-200'}`}>
+                    {item.topic}
+                  </h3>
+                  <p className="text-sm text-gray-400 mt-1 leading-relaxed">{item.description}</p>
+                  <div className="flex items-center gap-2 mt-3">
+                    <span className="text-xs px-2.5 py-1 rounded-md font-medium" style={{ backgroundColor: colors.bg, color: colors.text, border: `1px solid ${colors.border}` }}>
+                      {STREET_LABELS[item.street] || item.street}
+                    </span>
+                    {catColor && (
+                      <span className="text-xs px-2.5 py-1 rounded-md" style={{ backgroundColor: catColor.bg, color: catColor.text }}>
+                        {catColor.label}
+                      </span>
+                    )}
+                    <span className={`text-xs px-2.5 py-1 rounded-md font-medium ${
+                      item.priority === 'high' ? 'bg-red-900/20 text-red-400' :
+                      item.priority === 'medium' ? 'bg-yellow-900/20 text-yellow-400' :
+                      'bg-gray-900/20 text-gray-400'
+                    }`}>
+                      {item.priority === 'high' ? 'Alta' : item.priority === 'medium' ? 'Media' : 'Baja'}
+                    </span>
+                  </div>
+                </div>
+                <svg className={`w-5 h-5 text-gray-500 flex-shrink-0 mt-1 transition-transform`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </div>
+          )
+        })}
+        {filtered.length === 0 && (
+          <div className="text-center py-12 text-gray-500">
+            No hay temas que coincidan con los filtros
+          </div>
+        )}
+      </div>
     </div>
+    </AsyncHandler>
   )
 }

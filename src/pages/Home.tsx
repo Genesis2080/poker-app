@@ -1,19 +1,28 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
-import type { Session, GameModality } from '../types'
+import type { GameModality } from '../types'
 import { Button } from '../components/Button'
 import { Input } from '../components/Input'
 import { Modal } from '../components/Modal'
+import { AsyncHandler } from '../components/AsyncHandler'
 import { useForm } from '../hooks/useForm'
 import { useCalculation } from '../hooks'
+import { ApiError } from '../api/client'
 
 export default function Home() {
-  const { data, addSession, deleteSession, updateFlashcard } = useApp()
+  const { data, addSession, deleteSession, updateFlashcard, dataLoading, dataError, retryLoadData } = useApp()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [modality, setModality] = useState<GameModality>('cash')
   const [filterModality, setFilterModality] = useState<GameModality | 'all'>('all')
   const [currentCard, setCurrentCard] = useState(0)
   const [isFlipped, setIsFlipped] = useState(false)
+  const [confirmText, setConfirmText] = useState('')
+
+  useEffect(() => {
+    if (currentCard >= data.flashcards.length) {
+      setCurrentCard(Math.max(0, data.flashcards.length - 1))
+    }
+  }, [data.flashcards.length, currentCard])
 
   const stats = useCalculation(() => {
     const sessions = data.sessions || []
@@ -62,7 +71,12 @@ export default function Home() {
     }
   }, [data.sessions, filterModality])
 
-  const { values, errors, handleChange, handleBlur, submitForm } = useForm(
+  const handleCloseModal = () => {
+    setIsModalOpen(false)
+    setConfirmText('')
+  }
+
+  const { values, errors, handleChange, handleBlur, submitForm, submitError } = useForm(
     {
       date: new Date().toISOString().split('T')[0],
       tournamentName: '',
@@ -75,18 +89,18 @@ export default function Home() {
       { field: 'cashOut', rule: (v) => !v ? 'El dinero ganado es requerido' : null },
       { field: 'timePlayedMinutes', rule: (v) => !v ? 'El tiempo jugado es requerido' : null },
     ],
-    (vals) => {
-      const newSession: Session = {
-        id: Date.now().toString(),
+    async (vals) => {
+      await addSession({
         date: vals.date,
         modality,
         tournamentName: modality === 'tournament' ? vals.tournamentName || undefined : undefined,
         buyIn: parseFloat(vals.buyIn),
         cashOut: parseFloat(vals.cashOut),
         timePlayedMinutes: parseInt(vals.timePlayedMinutes),
-      }
-      addSession(newSession)
+      })
+      setConfirmText('Sesión registrada correctamente')
       setIsModalOpen(false)
+      setTimeout(() => setConfirmText(''), 2500)
     }
   )
 
@@ -100,9 +114,10 @@ export default function Home() {
   }
 
   return (
+    <AsyncHandler loading={dataLoading} error={dataError} onRetry={retryLoadData}>
     <div className="space-y-6">
       {/* Header elegante */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-gray-800 to-gray-900 rounded-2xl p-8 border border-gray-700">
+      <div className="relative overflow-hidden bg-gradient-to-r from-gray-800 to-gray-900 rounded-2xl p-4 md:p-8 border border-gray-700">
         <div className="relative z-10">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
             Poker Analytics
@@ -119,6 +134,13 @@ export default function Home() {
           Nueva Sesión
         </button>
       </div>
+
+      {confirmText && (
+        <div className="fixed top-4 right-4 z-50 bg-green-900/90 text-green-300 px-5 py-3 rounded-xl shadow-2xl border border-green-700/50 backdrop-blur-sm flex items-center gap-2">
+          <span>✅</span>
+          <span className="font-medium">{confirmText}</span>
+        </div>
+      )}
 
       {/* Stats Cards con diseño mejorado */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -144,7 +166,7 @@ export default function Home() {
       </div>
 
       {/* Filtros de modalidad */}
-      <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
         {(['all', 'cash', 'tournament', 'spins'] as const).map(filt => (
           <button
             key={filt}
@@ -247,7 +269,7 @@ export default function Home() {
           </div>
 
           {/* Stats PT4 style */}
-          <div className="grid grid-cols-4 gap-4 mt-6 pt-4 border-t border-gray-700">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-4 border-t border-gray-700">
             <div className="text-center">
               <div className="text-green-400 font-bold">+${stats.biggestWin.toFixed(2)}</div>
               <div className="text-gray-500 text-xs">Mayor Ganancia</div>
@@ -269,7 +291,7 @@ export default function Home() {
           </div>
         </div>
       ) : (
-        <div className="bg-gray-800 rounded-2xl p-12 border border-gray-700 text-center">
+        <div className="bg-gray-800 rounded-2xl p-6 md:p-12 border border-gray-700 text-center">
           <div className="text-6xl mb-4">🎲</div>
           <p className="text-gray-400 text-lg mb-2">No hay sesiones registradas</p>
           <p className="text-gray-500 text-sm">¡Añade tu primera sesión para ver las estadísticas!</p>
@@ -322,7 +344,7 @@ export default function Home() {
                         </div>
                       </div>
                       <button
-                        onClick={() => deleteSession(session.id)}
+                        onClick={() => deleteSession(session.id).catch(() => {})}
                         className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-red-400"
                         title="Eliminar sesión"
                       >
@@ -387,12 +409,14 @@ export default function Home() {
                     </div>
                     <p className="text-gray-200 text-sm leading-relaxed">{data.flashcards[currentCard].answer}</p>
                     <button
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation()
                         const card = data.flashcards[currentCard]
-                        updateFlashcard(card.id, {
-                          reviews: card.reviews + 1,
-                        })
+                        try {
+                          await updateFlashcard(card.id, {
+                            reviews: card.reviews + 1,
+                          })
+                        } catch {}
                       }}
                       className="mt-4 text-xs px-3 py-1.5 bg-green-600/20 text-green-400 rounded-lg hover:bg-green-600/30 transition-colors"
                     >
@@ -431,11 +455,11 @@ export default function Home() {
       {/* Modal para nueva sesión */}
       <Modal
         isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        onClose={handleCloseModal}
         title="Nueva Sesión"
         footer={
           <>
-            <Button variant="ghost" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
+            <Button variant="ghost" onClick={handleCloseModal}>Cancelar</Button>
             <Button onClick={submitForm}>Guardar</Button>
           </>
         }
@@ -468,8 +492,12 @@ export default function Home() {
             <Input label="Cash-out ($)" type="number" value={values.cashOut} onChange={(v) => handleChange('cashOut', v)} onBlur={() => handleBlur('cashOut')} error={errors.cashOut} required />
           </div>
           <Input label="Tiempo (min)" type="number" value={values.timePlayedMinutes} onChange={(v) => handleChange('timePlayedMinutes', v)} onBlur={() => handleBlur('timePlayedMinutes')} error={errors.timePlayedMinutes} required />
+          {submitError && (
+            <div className="text-sm text-red-400 bg-red-900/20 rounded-lg px-4 py-2.5 text-center">{submitError}</div>
+          )}
         </form>
       </Modal>
     </div>
+    </AsyncHandler>
   )
 }

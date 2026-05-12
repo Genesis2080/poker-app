@@ -10,7 +10,8 @@ interface FormStateResult<T> {
   setFieldValue: (field: keyof T, value: any) => void
   setFieldError: (field: keyof T, error: string) => void
   resetForm: () => void
-  submitForm: () => void
+  submitForm: () => Promise<void>
+  submitError: string | null
 }
 
 interface ValidationRule<T> {
@@ -21,12 +22,13 @@ interface ValidationRule<T> {
 export function useForm<T extends Record<string, any>>(
   initialValues: T,
   validationRules: ValidationRule<T>[] = [],
-  onSubmit: (values: T) => void
+  onSubmit: (values: T) => void | Promise<void>
 ): FormStateResult<T> {
   const [values, setValues] = useState<T>(initialValues)
   const [errors, setErrors] = useState<Partial<Record<keyof T, string>>>({})
   const [touched, setTouched] = useState<Partial<Record<keyof T, boolean>>>({})
   const [isDirty, setIsDirty] = useState<boolean>(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
 
   const validate = useCallback((vals: T): Partial<Record<keyof T, string>> => {
     const newErrors: Partial<Record<keyof T, string>> = {}
@@ -42,7 +44,6 @@ export function useForm<T extends Record<string, any>>(
   const handleChange = useCallback((field: keyof T, value: any) => {
     setValues(prev => ({ ...prev, [field]: value }))
     setIsDirty(true)
-    // Limpiar error al cambiar
     setErrors(prev => ({ ...prev, [field]: undefined }))
   }, [])
 
@@ -67,15 +68,22 @@ export function useForm<T extends Record<string, any>>(
     setErrors({})
     setTouched({})
     setIsDirty(false)
+    setSubmitError(null)
   }, [initialValues])
 
-  const submitForm = useCallback(() => {
+  const submitForm = useCallback(async () => {
+    setSubmitError(null)
     const formErrors = validate(values)
     if (Object.keys(formErrors).length > 0) {
       setErrors(formErrors)
       return
     }
-    onSubmit(values)
+    try {
+      await Promise.resolve(onSubmit(values))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Error al enviar el formulario'
+      setSubmitError(msg)
+    }
   }, [values, validate, onSubmit])
 
   const isValid = Object.keys(errors).length === 0
@@ -91,5 +99,6 @@ export function useForm<T extends Record<string, any>>(
     setFieldError,
     resetForm,
     submitForm,
+    submitError,
   }
 }
