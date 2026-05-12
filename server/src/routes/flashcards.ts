@@ -5,11 +5,12 @@ import {
   createFlashcardSchema,
   updateFlashcardSchema,
 } from '../middleware/validation.js'
+import { asyncHandler } from '../middleware/asyncHandler.js'
 
 const router = Router()
 
-router.get('/', controller.getAll)
-router.post('/', validate(createFlashcardSchema), controller.create)
-router.patch('/:id', validate(updateFlashcardSchema), controller.patch)
+router.get('/', asyncHandler(controller.getAll))
+router.post('/', validate(createFlashcardSchema), asyncHandler(controller.create))
+router.patch('/:id', validate(updateFlashcardSchema), asyncHandler(controller.patch))
 
 export default router
