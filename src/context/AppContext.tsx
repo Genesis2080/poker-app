@@ -131,6 +131,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (sessionRestored && user) {
       loadAllData()
+    } else if (sessionRestored && !user) {
+      setDataLoading(false)
     }
   }, [sessionRestored, user, loadAllData])
 
