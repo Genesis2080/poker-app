@@ -87,5 +87,6 @@ export interface AppStats {
 }
 
 export interface AuthUser {
+  email: string
   username: string
 }

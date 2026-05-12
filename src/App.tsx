@@ -6,7 +6,15 @@ import Hands from './pages/Hands'
 import Login from './pages/Login'
 
 function AppContent() {
-  const { isAuthenticated, user, logout } = useApp()
+  const { isAuthenticated, user, logout, loading } = useApp()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-gray-400 text-lg">Cargando...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100">
@@ -28,7 +36,7 @@ function AppContent() {
             <div className="pl-4 border-l border-gray-700">
               {isAuthenticated ? (
                 <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-400">{user?.username}</span>
+                  <span className="text-sm text-gray-400">{user?.username || user?.email}</span>
                   <button
                     onClick={logout}
                     className="text-xs px-3 py-1.5 bg-gray-700 hover:bg-red-900/30 text-gray-300 hover:text-red-400 rounded-lg transition-colors"
