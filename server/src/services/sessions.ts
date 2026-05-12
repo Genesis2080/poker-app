@@ -1,20 +1,19 @@
 import * as store from '../data/store.js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Session } from '../types/index.js'
 
-export function listSessions(): Session[] {
-  return store.getSessions()
+export async function listSessions(supabase: SupabaseClient): Promise<Session[]> {
+  return store.getSessions(supabase)
 }
 
-export function getSession(id: string): Session | null {
-  return store.getSessionById(id) ?? null
+export async function getSession(supabase: SupabaseClient, id: string): Promise<Session | null> {
+  return store.getSessionById(supabase, id)
 }
 
-export function createSession(data: Omit<Session, 'id'>): Session {
-  const session: Session = { ...data, id: crypto.randomUUID() }
-  store.addSession(session)
-  return session
+export async function createSession(supabase: SupabaseClient, userId: string, data: Omit<Session, 'id'>): Promise<Session> {
+  return store.addSession(supabase, userId, data)
 }
 
-export function removeSession(id: string): boolean {
-  return store.deleteSession(id)
+export async function removeSession(supabase: SupabaseClient, id: string): Promise<boolean> {
+  return store.deleteSession(supabase, id)
 }

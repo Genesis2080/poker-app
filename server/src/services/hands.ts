@@ -1,24 +1,23 @@
 import * as store from '../data/store.js'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Hand } from '../types/index.js'
 
-export function listHands(): Hand[] {
-  return store.getHands()
+export async function listHands(supabase: SupabaseClient): Promise<Hand[]> {
+  return store.getHands(supabase)
 }
 
-export function getHand(id: string): Hand | null {
-  return store.getHandById(id) ?? null
+export async function getHand(supabase: SupabaseClient, id: string): Promise<Hand | null> {
+  return store.getHandById(supabase, id)
 }
 
-export function createHand(data: Omit<Hand, 'id'>): Hand {
-  const hand: Hand = { ...data, id: crypto.randomUUID() }
-  store.addHand(hand)
-  return hand
+export async function createHand(supabase: SupabaseClient, userId: string, data: Omit<Hand, 'id'>): Promise<Hand> {
+  return store.addHand(supabase, userId, data)
 }
 
-export function patchHand(id: string, updates: Partial<Hand>): Hand | null {
-  return store.updateHand(id, updates)
+export async function patchHand(supabase: SupabaseClient, id: string, updates: Partial<Hand>): Promise<Hand | null> {
+  return store.updateHand(supabase, id, updates)
 }
 
-export function removeHand(id: string): boolean {
-  return store.deleteHand(id)
+export async function removeHand(supabase: SupabaseClient, id: string): Promise<boolean> {
+  return store.deleteHand(supabase, id)
 }

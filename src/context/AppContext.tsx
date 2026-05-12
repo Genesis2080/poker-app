@@ -52,6 +52,11 @@ function toAuthUser(sbUser: User): AuthUser {
   }
 }
 
+async function getToken(): Promise<string> {
+  const { data: { session } } = await supabase.auth.getSession()
+  return session?.access_token || ''
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(emptyData)
   const [user, setUser] = useState<AuthUser | null>(null)
@@ -60,13 +65,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [dataError, setDataError] = useState<string | null>(null)
 
   // Restaurar sesión de Supabase
+  const [sessionRestored, setSessionRestored] = useState(false)
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession()
       if (session?.user) {
         setUser(toAuthUser(session.user))
       }
       setAuthLoading(false)
-    })
+      setSessionRestored(true)
+    }
+    init()
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
@@ -83,18 +92,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setDataLoading(true)
     setDataError(null)
     try {
+      const token = await getToken()
+      if (!token) throw new ApiError(401, 'No hay sesión activa')
+
       const [sessions, hands, studyPlan, flashcards] = await Promise.all([
-        api.sessions.list(),
-        api.hands.list(),
-        api.study.list(),
-        api.flashcards.list(),
+        api.sessions.list(token),
+        api.hands.list(token),
+        api.study.list(token),
+        api.flashcards.list(token),
       ])
 
       let finalFlashcards = flashcards
       if (flashcards.length === 0) {
         const defaults = createDefaultFlashcards()
         finalFlashcards = await Promise.all(
-          defaults.map((card) => api.flashcards.create(card))
+          defaults.map((card) => api.flashcards.create(card, token))
         )
       }
 
@@ -102,7 +114,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (studyPlan.length === 0) {
         const allItems = Object.values(INITIAL_STUDY_PLAN).flat()
         finalStudyPlan = await Promise.all(
-          allItems.map((item) => api.study.create(item))
+          allItems.map((item) => api.study.create(item, token))
         )
       }
 
@@ -115,9 +127,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // Load data once auth is restored and user is authenticated
   useEffect(() => {
-    loadAllData()
-  }, [loadAllData])
+    if (sessionRestored && user) {
+      loadAllData()
+    }
+  }, [sessionRestored, user, loadAllData])
 
   // Auth
   const isAuthenticated = user !== null
@@ -140,65 +155,72 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
   }, [])
 
-  // CRUD: Sessions
-  const addSession = useCallback(async (payload: Omit<Session, 'id'>) => {
-    const created = await api.sessions.create(payload)
-    setData((prev) => ({ ...prev, sessions: [created, ...prev.sessions] }))
+  // Helper: get token and call api
+  const withToken = useCallback(async <T,>(fn: (token: string) => Promise<T>): Promise<T> => {
+    const token = await getToken()
+    if (!token) throw new ApiError(401, 'No hay sesión activa')
+    return fn(token)
   }, [])
 
+  // CRUD: Sessions
+  const addSession = useCallback(async (payload: Omit<Session, 'id'>) => {
+    const created = await withToken((t) => api.sessions.create(payload, t))
+    setData((prev) => ({ ...prev, sessions: [created, ...prev.sessions] }))
+  }, [withToken])
+
   const deleteSession = useCallback(async (id: string) => {
-    await api.sessions.delete(id)
+    await withToken((t) => api.sessions.delete(id, t))
     setData((prev) => ({ ...prev, sessions: prev.sessions.filter((s) => s.id !== id) }))
-  }, [])
+  }, [withToken])
 
   // CRUD: Hands
   const addHand = useCallback(async (payload: Omit<Hand, 'id'>) => {
-    const created = await api.hands.create(payload)
+    const created = await withToken((t) => api.hands.create(payload, t))
     setData((prev) => ({ ...prev, hands: [created, ...prev.hands] }))
-  }, [])
+  }, [withToken])
 
   const updateHand = useCallback(async (id: string, updates: Partial<Hand>) => {
-    const updated = await api.hands.patch(id, updates)
+    const updated = await withToken((t) => api.hands.patch(id, updates, t))
     setData((prev) => ({
       ...prev,
       hands: prev.hands.map((h) => (h.id === id ? updated : h)),
     }))
-  }, [])
+  }, [withToken])
 
   const deleteHand = useCallback(async (id: string) => {
-    await api.hands.delete(id)
+    await withToken((t) => api.hands.delete(id, t))
     setData((prev) => ({ ...prev, hands: prev.hands.filter((h) => h.id !== id) }))
-  }, [])
+  }, [withToken])
 
   // CRUD: Study
   const addStudyItem = useCallback(async (payload: Omit<StudyPlanItem, 'id' | 'completed'>) => {
-    const created = await api.study.create(payload)
+    const created = await withToken((t) => api.study.create(payload, t))
     setData((prev) => ({ ...prev, studyPlan: [...prev.studyPlan, created] }))
-  }, [])
+  }, [withToken])
 
   const toggleStudyItem = useCallback(async (id: string) => {
-    const updated = await api.study.toggle(id)
+    const updated = await withToken((t) => api.study.toggle(id, t))
     setData((prev) => ({
       ...prev,
       studyPlan: prev.studyPlan.map((item) =>
         item.id === id ? updated : item
       ),
     }))
-  }, [])
+  }, [withToken])
 
   // CRUD: Flashcards
   const addFlashcard = useCallback(async (payload: Omit<Flashcard, 'id'>) => {
-    const created = await api.flashcards.create(payload)
+    const created = await withToken((t) => api.flashcards.create(payload, t))
     setData((prev) => ({ ...prev, flashcards: [...prev.flashcards, created] }))
-  }, [])
+  }, [withToken])
 
   const updateFlashcard = useCallback(async (id: string, updates: Partial<Flashcard>) => {
-    const updated = await api.flashcards.patch(id, updates)
+    const updated = await withToken((t) => api.flashcards.patch(id, updates, t))
     setData((prev) => ({
       ...prev,
       flashcards: prev.flashcards.map((f) => (f.id === id ? updated : f)),
     }))
-  }, [])
+  }, [withToken])
 
   return (
     <AppContext.Provider

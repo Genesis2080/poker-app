@@ -14,11 +14,16 @@ export class ApiError extends Error {
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+async function request<T>(path: string, options?: RequestInit & { token?: string }): Promise<T> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (options?.token) {
+    headers['Authorization'] = `Bearer ${options.token}`
+  }
+
   let res: Response
   try {
     res = await fetch(`${BASE_URL}${path}`, {
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       ...options,
     })
   } catch {
@@ -40,42 +45,42 @@ type CreateFlashcardPayload = Omit<Flashcard, 'id'>
 
 export const api = {
   sessions: {
-    list: () => request<Session[]>('/sessions'),
-    getById: (id: string) => request<Session>(`/sessions/${id}`),
-    create: (data: CreateSessionPayload) =>
-      request<Session>('/sessions', { method: 'POST', body: JSON.stringify(data) }),
-    delete: (id: string) =>
-      request<{ message: string }>(`/sessions/${id}`, { method: 'DELETE' }),
+    list: (token?: string) => request<Session[]>('/sessions', { token }),
+    getById: (id: string, token?: string) => request<Session>(`/sessions/${id}`, { token }),
+    create: (data: CreateSessionPayload, token?: string) =>
+      request<Session>('/sessions', { method: 'POST', body: JSON.stringify(data), token }),
+    delete: (id: string, token?: string) =>
+      request<{ message: string }>(`/sessions/${id}`, { method: 'DELETE', token }),
   },
 
   hands: {
-    list: () => request<Hand[]>('/hands'),
-    getById: (id: string) => request<Hand>(`/hands/${id}`),
-    create: (data: CreateHandPayload) =>
-      request<Hand>('/hands', { method: 'POST', body: JSON.stringify(data) }),
-    patch: (id: string, data: Partial<Hand>) =>
-      request<Hand>(`/hands/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    delete: (id: string) =>
-      request<{ message: string }>(`/hands/${id}`, { method: 'DELETE' }),
+    list: (token?: string) => request<Hand[]>('/hands', { token }),
+    getById: (id: string, token?: string) => request<Hand>(`/hands/${id}`, { token }),
+    create: (data: CreateHandPayload, token?: string) =>
+      request<Hand>('/hands', { method: 'POST', body: JSON.stringify(data), token }),
+    patch: (id: string, data: Partial<Hand>, token?: string) =>
+      request<Hand>(`/hands/${id}`, { method: 'PATCH', body: JSON.stringify(data), token }),
+    delete: (id: string, token?: string) =>
+      request<{ message: string }>(`/hands/${id}`, { method: 'DELETE', token }),
   },
 
   study: {
-    list: () => request<StudyPlanItem[]>('/study'),
-    create: (data: CreateStudyPayload) =>
-      request<StudyPlanItem>('/study', { method: 'POST', body: JSON.stringify(data) }),
-    toggle: (id: string) =>
-      request<StudyPlanItem>(`/study/${id}/toggle`, { method: 'PATCH' }),
+    list: (token?: string) => request<StudyPlanItem[]>('/study', { token }),
+    create: (data: CreateStudyPayload, token?: string) =>
+      request<StudyPlanItem>('/study', { method: 'POST', body: JSON.stringify(data), token }),
+    toggle: (id: string, token?: string) =>
+      request<StudyPlanItem>(`/study/${id}/toggle`, { method: 'PATCH', token }),
   },
 
   flashcards: {
-    list: () => request<Flashcard[]>('/flashcards'),
-    create: (data: CreateFlashcardPayload) =>
-      request<Flashcard>('/flashcards', { method: 'POST', body: JSON.stringify(data) }),
-    patch: (id: string, data: Partial<Flashcard>) =>
-      request<Flashcard>(`/flashcards/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    list: (token?: string) => request<Flashcard[]>('/flashcards', { token }),
+    create: (data: CreateFlashcardPayload, token?: string) =>
+      request<Flashcard>('/flashcards', { method: 'POST', body: JSON.stringify(data), token }),
+    patch: (id: string, data: Partial<Flashcard>, token?: string) =>
+      request<Flashcard>(`/flashcards/${id}`, { method: 'PATCH', body: JSON.stringify(data), token }),
   },
 
   stats: {
-    get: () => request<AppStats>('/stats'),
+    get: (token?: string) => request<AppStats>('/stats', { token }),
   },
 }
